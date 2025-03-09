@@ -123,6 +123,25 @@ impl OrderBook {
         transactions
     }
 
+    pub fn all_orders(&self) -> Vec<LimitOrder> {
+        let asks: Vec<LimitOrder> = self
+            .asks
+            .clone()
+            .into_vec()
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        let bids: Vec<LimitOrder> = self
+            .bids
+            .clone()
+            .into_vec()
+            .into_iter()
+            .map(Into::into)
+            .collect();
+
+        [asks, bids].concat()
+    }
+
     pub fn time_inc(&self) {
         *self.time.borrow_mut() += 1;
     }

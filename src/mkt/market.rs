@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, fmt::Display};
 
 use crate::ob::{
     book::{OrderBook, Transaction},
@@ -16,11 +16,31 @@ pub struct Account {
     pub dept: Amount,
 }
 
-#[derive(Default)]
+impl Account {
+    fn starting_account() -> Self {
+        Account {
+            commodity: 10,
+            money: Amount { as_int: 10 },
+            ..Default::default()
+        }
+    }
+}
+
+#[derive(Default, Debug)]
 pub struct History {
     pub transactions: Vec<Transaction>,
     pub rejected_orders: Vec<LimitOrder>,
     pub unfulfilled_orders: Vec<LimitOrder>,
+}
+
+impl Display for History {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "fulfilled: {:?}\nrejected: {:?}\nunfulfilled: {:?}",
+            self.transactions, self.rejected_orders, self.unfulfilled_orders
+        )
+    }
 }
 
 #[derive(Default)]
@@ -40,7 +60,7 @@ impl Market {
         let id = AgentId::new(*self.id.borrow());
         *self.id.borrow_mut() += 1;
         agent.setup(id);
-        self.accounts.insert(id, Account::default());
+        self.accounts.insert(id, Account::starting_account());
         self.agents.insert(id, RefCell::new(agent));
         id
     }
@@ -70,6 +90,7 @@ impl Market {
             .for_each(|trns| self.satisfy_transaction(trns));
 
         self.history.transactions = transactions;
+        self.history.unfulfilled_orders = self.book.all_orders();
     }
 }
 
@@ -81,11 +102,9 @@ impl Market {
         });
     }
 
-    fn reserve(&mut self, order: &LimitOrder) -> bool {
-        let Some(agent_id) = self.owner(order) else {
-            return false;
-        };
+    fn reserve(&mut self, agent_id: AgentId, order: &LimitOrder) -> bool {
         let Some(account_data) = self.account(agent_id) else {
+            println!("Can't find account for {:?}", agent_id);
             return false;
         };
 
@@ -133,15 +152,14 @@ impl Market {
                 .collect();
 
             orders.iter().for_each(|order| {
-                if !self.reserve(order) {
+                if !self.reserve(*agent_id, order) {
                     rejected_orders.push(*order);
                 } else {
                     let order_id = Into::<FlatLimitOrder>::into(*order).id;
                     self.order_map.insert(order_id, *agent_id);
+                    self.book.add_order(*order);
                 }
             });
-
-            self.book.add_orders(orders);
         });
 
         std::mem::swap(&mut self.agents, &mut agents);
@@ -151,7 +169,10 @@ impl Market {
 
     fn satisfy_transaction(&mut self, trns: &Transaction) {
         let Some(bidder_id) = self.order_map.get(&trns.bid_id) else {
-            panic!("{:?} has no bidder", trns);
+            panic!(
+                "{:?} has no bidder: {:?}\n{:?}",
+                trns, self.order_map, self.history
+            );
         };
         let Some(asker_id) = self.order_map.get(&trns.ask_id) else {
             panic!("{:?} has no asker", trns);
