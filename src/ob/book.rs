@@ -148,7 +148,53 @@ impl OrderBook {
 }
 
 #[cfg(test)]
-mod tests {
+mod prop_tests {
+    use super::*;
+    use quickcheck_macros::quickcheck;
+
+    impl quickcheck::Arbitrary for OrderSide {
+        fn arbitrary(g: &mut quickcheck::Gen) -> OrderSide {
+            g.choose(&[OrderSide::Bid, OrderSide::Ask])
+                .cloned()
+                .unwrap()
+        }
+    }
+
+    impl quickcheck::Arbitrary for Amount {
+        fn arbitrary(g: &mut quickcheck::Gen) -> Amount {
+            Amount {
+                as_int: *g.choose(Vec::from_iter(1..100).as_slice()).unwrap(),
+            }
+        }
+    }
+
+    #[quickcheck]
+    fn match_all_idempotent(order_data: Vec<(OrderSide, Amount, u32)>) -> bool {
+        let mut ob = OrderBook::default();
+
+        let orders: Vec<_> = order_data
+            .into_iter()
+            .map(|(side, price, size)| ob.new_order(side, price, size as i64, false))
+            .collect();
+
+        orders.into_iter().for_each(|order| ob.add_order(order));
+
+        // print!("{:?} -> ", ob.all_orders().len());
+
+        ob.match_all();
+
+        let remaining = ob.all_orders();
+
+        // println!("{:?}", ob.all_orders().len());
+
+        ob.match_all();
+
+        remaining == ob.all_orders()
+    }
+}
+
+#[cfg(test)]
+mod simple_tests {
     use super::*;
 
     #[test]
