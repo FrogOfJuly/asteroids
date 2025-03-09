@@ -62,12 +62,12 @@ impl OrderBook {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Transaction {
-    bid_id: u64,
-    ask_id: u64,
-    size: i64,
-    bid_loss: Amount,
-    ask_gain: Amount,
-    diff: Amount,
+    pub bid_id: u64,
+    pub ask_id: u64,
+    pub size: i64,
+    pub bid_loss: Amount,
+    pub ask_gain: Amount,
+    pub diff: Amount,
 }
 
 impl OrderBook {

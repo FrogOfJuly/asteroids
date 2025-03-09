@@ -1,8 +1,9 @@
-use ob::book::OrderBook;
+use mkt::market::*;
 
+pub mod mkt;
 pub mod ob;
 
 fn main() {
-    let mut ob = OrderBook::default();
-    ob.clear_orders();
+    let mut market = Market::default();
+    market.step();
 }

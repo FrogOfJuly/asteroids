@@ -1,4 +1,4 @@
-use std::ops::{AddAssign, Mul, MulAssign, Not};
+use std::ops::{AddAssign, Mul, MulAssign, Not, SubAssign};
 
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
 pub enum OrderSide {
@@ -37,6 +37,12 @@ impl Default for Amount {
 impl AddAssign for Amount {
     fn add_assign(&mut self, rhs: Self) {
         self.as_int += rhs.as_int;
+    }
+}
+
+impl SubAssign for Amount {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.as_int -= rhs.as_int;
     }
 }
 
