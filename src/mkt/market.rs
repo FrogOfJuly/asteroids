@@ -1,8 +1,9 @@
 use std::{cell::RefCell, collections::HashMap, fmt::Display};
 
 use crate::ob::{
+    amount::Amount,
     book::{OrderBook, Transaction},
-    order::{Amount, FlatLimitOrder, LimitOrder},
+    orders::{flat::FlatOrder, limit::LimitOrder},
 };
 
 use super::agent::{Agent, AgentId};
@@ -29,8 +30,8 @@ impl Account {
 #[derive(Default, Debug)]
 pub struct History {
     pub transactions: Vec<Transaction>,
-    pub rejected_orders: Vec<LimitOrder>,
-    pub unfulfilled_orders: Vec<LimitOrder>,
+    pub rejected_orders: Vec<FlatOrder>,
+    pub unfulfilled_orders: Vec<FlatOrder>,
 }
 
 impl Display for History {
@@ -66,7 +67,7 @@ impl Market {
     }
 
     pub fn owner(&self, order: &LimitOrder) -> Option<AgentId> {
-        let order_id = Into::<FlatLimitOrder>::into(*order).id;
+        let order_id = Into::<FlatOrder>::into(*order).id;
         self.order_map.get(&order_id).cloned()
     }
 
@@ -82,7 +83,7 @@ impl Market {
 
         self.history = History::default();
 
-        self.history.rejected_orders = rejected_orders;
+        self.history.rejected_orders = rejected_orders.into_iter().map(Into::into).collect();
         let transactions = self.book.match_all();
 
         transactions
@@ -137,8 +138,8 @@ impl Market {
         }
     }
 
-    fn process_agent_actions(&mut self) -> Vec<LimitOrder> {
-        let mut rejected_orders: Vec<LimitOrder> = Vec::new();
+    fn process_agent_actions(&mut self) -> Vec<FlatOrder> {
+        let mut rejected_orders: Vec<FlatOrder> = Vec::new();
         let mut agents: HashMap<AgentId, RefCell<Box<dyn Agent>>> = Default::default();
 
         std::mem::swap(&mut self.agents, &mut agents);
@@ -151,13 +152,17 @@ impl Market {
                 .map(|(side, price, size)| self.book.new_order(side, price, size, false))
                 .collect();
 
-            orders.iter().for_each(|order| {
-                if !self.reserve(*agent_id, order) {
-                    rejected_orders.push(*order);
+            orders.iter().for_each(|&order| {
+                let Result::Ok(limit_order) = order.try_into() else {
+                    return;
+                };
+                let reserved = self.reserve(*agent_id, &limit_order);
+                if !reserved {
+                    rejected_orders.push(order);
                 } else {
-                    let order_id = Into::<FlatLimitOrder>::into(*order).id;
+                    let order_id = Into::<FlatOrder>::into(order).id;
                     self.order_map.insert(order_id, *agent_id);
-                    self.book.add_order(*order);
+                    self.book.add_order(order);
                 }
             });
         });

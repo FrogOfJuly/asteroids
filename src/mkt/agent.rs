@@ -1,5 +1,5 @@
 use super::market::History;
-use crate::ob::order::{Amount, OrderSide};
+use crate::ob::{amount::Amount, orders::flat::OrderSide};
 
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct AgentId(u64);

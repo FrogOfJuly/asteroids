@@ -1,4 +1,10 @@
-use super::order::{Amount, AskLimitOrder, BidLimitOrder, FlatLimitOrder, LimitOrder, OrderSide};
+use super::{
+    amount::Amount,
+    orders::{
+        flat::{FlatOrder, OrderSide},
+        limit::{AskLimitOrder, BidLimitOrder, LimitOrder},
+    },
+};
 use std::{cell::RefCell, cmp::Ordering, collections::BinaryHeap};
 
 #[derive(Clone, Debug, Default)]
@@ -17,7 +23,7 @@ impl OrderBook {
         price: Amount,
         size: i64,
         inc_time: bool,
-    ) -> LimitOrder {
+    ) -> FlatOrder {
         let id = *self.id.borrow();
         *self.id.borrow_mut() += 1;
 
@@ -27,14 +33,13 @@ impl OrderBook {
             *self.time.borrow_mut() += 1;
         }
 
-        FlatLimitOrder {
+        FlatOrder {
             timestamp,
             id,
             side,
-            price,
+            price: Some(price),
             size,
         }
-        .into()
     }
 
     pub fn clear_orders(&mut self) {
@@ -42,18 +47,21 @@ impl OrderBook {
         self.bids.clear();
     }
 
-    pub fn add_orders(&mut self, data: Vec<LimitOrder>) {
+    pub fn add_orders(&mut self, data: Vec<FlatOrder>) {
         data.into_iter().for_each(|o| self.add_order(o));
     }
 
-    pub fn add_order(&mut self, order: LimitOrder) {
+    pub fn add_order(&mut self, order: FlatOrder) {
+        let Result::Ok(order) = order.try_into() else {
+            return;
+        };
         match order {
             LimitOrder::BidOrder { data } => self.bids.push(data.into()),
             LimitOrder::AskOrder { data } => self.asks.push(data.into()),
         };
     }
 
-    pub fn from_orders(data: Vec<LimitOrder>) -> Self {
+    pub fn from_orders(data: Vec<FlatOrder>) -> Self {
         let mut b = Self::default();
         b.add_orders(data);
         b
@@ -123,15 +131,15 @@ impl OrderBook {
         transactions
     }
 
-    pub fn all_orders(&self) -> Vec<LimitOrder> {
-        let asks: Vec<LimitOrder> = self
+    pub fn all_orders(&self) -> Vec<FlatOrder> {
+        let asks: Vec<FlatOrder> = self
             .asks
             .clone()
             .into_vec()
             .into_iter()
             .map(Into::into)
             .collect();
-        let bids: Vec<LimitOrder> = self
+        let bids: Vec<FlatOrder> = self
             .bids
             .clone()
             .into_vec()

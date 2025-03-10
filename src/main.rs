@@ -2,7 +2,7 @@ use mkt::{
     agent::{Agent, AgentId},
     market::*,
 };
-use ob::order::{Amount, OrderSide};
+use ob::{amount::Amount, orders::flat::OrderSide};
 
 pub mod mkt;
 pub mod ob;
@@ -16,10 +16,7 @@ impl Agent for ProducerAgent {
         self.id = id;
     }
 
-    fn produce_orders(
-        &mut self,
-        _history: &History,
-    ) -> Vec<(ob::order::OrderSide, ob::order::Amount, i64)> {
+    fn produce_orders(&mut self, _history: &History) -> Vec<(OrderSide, Amount, i64)> {
         vec![
             (OrderSide::Ask, Amount { as_int: 1 }, 1),
             (OrderSide::Ask, Amount { as_int: 2 }, 1),

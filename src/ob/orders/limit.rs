@@ -1,82 +1,6 @@
-use std::ops::{AddAssign, Mul, MulAssign, Not, SubAssign};
+use crate::ob::orders::flat::OrderSide;
 
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
-pub enum OrderSide {
-    Bid, // buy
-    Ask, // sell
-}
-
-impl Not for OrderSide {
-    type Output = OrderSide;
-
-    fn not(self) -> OrderSide {
-        match self {
-            OrderSide::Bid => OrderSide::Ask,
-            OrderSide::Ask => OrderSide::Bid,
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub struct Amount {
-    pub as_int: i64, // "cents"
-}
-
-impl Amount {
-    pub fn new() -> Self {
-        Amount { as_int: 0 }
-    }
-}
-
-impl Default for Amount {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl AddAssign for Amount {
-    fn add_assign(&mut self, rhs: Self) {
-        self.as_int += rhs.as_int;
-    }
-}
-
-impl SubAssign for Amount {
-    fn sub_assign(&mut self, rhs: Self) {
-        self.as_int -= rhs.as_int;
-    }
-}
-
-impl MulAssign<i64> for Amount {
-    fn mul_assign(&mut self, rhs: i64) {
-        self.as_int *= rhs;
-    }
-}
-
-impl Mul<i64> for Amount {
-    type Output = Self;
-    fn mul(self, rhs: i64) -> Self {
-        Amount {
-            as_int: self.as_int * rhs,
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct FlatLimitOrder {
-    pub timestamp: i64,
-    pub id: u64,
-    pub side: OrderSide,
-    pub price: Amount,
-    pub size: i64,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct LimitOrderData {
-    pub timestamp: i64,
-    pub id: u64,
-    pub price: Amount,
-    pub size: i64,
-}
+use super::flat::{FlatOrder, LimitOrderData};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum LimitOrder {
@@ -84,29 +8,38 @@ pub enum LimitOrder {
     AskOrder { data: LimitOrderData },
 }
 
-impl From<FlatLimitOrder> for LimitOrderData {
-    fn from(value: FlatLimitOrder) -> Self {
-        Self {
+impl TryFrom<FlatOrder> for LimitOrderData {
+    type Error = ();
+
+    fn try_from(value: FlatOrder) -> Result<Self, Self::Error> {
+        let Some(price) = value.price else {
+            return Result::Err(());
+        };
+
+        Result::Ok(Self {
             timestamp: value.timestamp,
             id: value.id,
-            price: value.price,
+            price,
             size: value.size,
-        }
+        })
     }
 }
 
-impl From<FlatLimitOrder> for LimitOrder {
-    fn from(value: FlatLimitOrder) -> Self {
+impl TryFrom<FlatOrder> for LimitOrder {
+    type Error = ();
+
+    fn try_from(value: FlatOrder) -> Result<Self, Self::Error> {
         use LimitOrder::*;
         use OrderSide::*;
+        let data: LimitOrderData = value.try_into()?;
         match value.side {
-            Bid => BidOrder { data: value.into() },
-            Ask => AskOrder { data: value.into() },
+            Bid => Result::Ok(BidOrder { data }),
+            Ask => Result::Ok(AskOrder { data }),
         }
     }
 }
 
-impl From<LimitOrder> for FlatLimitOrder {
+impl From<LimitOrder> for FlatOrder {
     fn from(value: LimitOrder) -> Self {
         use LimitOrder::*;
         use OrderSide::*;
@@ -114,14 +47,14 @@ impl From<LimitOrder> for FlatLimitOrder {
             BidOrder { data } => Self {
                 timestamp: data.timestamp,
                 id: data.id,
-                price: data.price,
+                price: Some(data.price),
                 size: data.size,
                 side: Bid,
             },
             AskOrder { data } => Self {
                 timestamp: data.timestamp,
                 id: data.id,
-                price: data.price,
+                price: Some(data.price),
                 size: data.size,
                 side: Ask,
             },
@@ -152,7 +85,7 @@ impl From<BidLimitOrder> for LimitOrder {
     }
 }
 
-impl From<BidLimitOrder> for FlatLimitOrder {
+impl From<BidLimitOrder> for FlatOrder {
     fn from(value: BidLimitOrder) -> Self {
         LimitOrder::BidOrder { data: value.data }.into()
     }
@@ -201,7 +134,7 @@ impl From<AskLimitOrder> for LimitOrder {
     }
 }
 
-impl From<AskLimitOrder> for FlatLimitOrder {
+impl From<AskLimitOrder> for FlatOrder {
     fn from(value: AskLimitOrder) -> Self {
         LimitOrder::AskOrder { data: value.data }.into()
     }
