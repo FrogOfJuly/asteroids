@@ -8,23 +8,6 @@ pub enum LimitOrder {
     AskOrder { data: LimitOrderData },
 }
 
-impl TryFrom<FlatOrder> for LimitOrderData {
-    type Error = ();
-
-    fn try_from(value: FlatOrder) -> Result<Self, Self::Error> {
-        let Some(price) = value.price else {
-            return Result::Err(());
-        };
-
-        Result::Ok(Self {
-            timestamp: value.timestamp,
-            id: value.id,
-            price,
-            size: value.size,
-        })
-    }
-}
-
 impl TryFrom<FlatOrder> for LimitOrder {
     type Error = ();
 
@@ -104,9 +87,11 @@ impl Ord for BidLimitOrder {
         match (
             self.data.price.cmp(&other.data.price),
             self.data.timestamp.cmp(&other.data.timestamp),
+            self.data.id.cmp(&other.data.id),
         ) {
-            (std::cmp::Ordering::Equal, c) => c,
-            (c, _) => c,
+            (std::cmp::Ordering::Equal, std::cmp::Ordering::Equal, c) => c.reverse(),
+            (std::cmp::Ordering::Equal, c, _) => c.reverse(),
+            (c, _, _) => c,
         }
     }
 }
@@ -153,9 +138,11 @@ impl Ord for AskLimitOrder {
         match (
             self.data.price.cmp(&other.data.price),
             self.data.timestamp.cmp(&other.data.timestamp),
+            self.data.id.cmp(&other.data.id),
         ) {
-            (std::cmp::Ordering::Equal, c) => c,
-            (c, _) => c.reverse(),
+            (std::cmp::Ordering::Equal, std::cmp::Ordering::Equal, c) => c.reverse(),
+            (std::cmp::Ordering::Equal, c, _) => c.reverse(),
+            (c, _, _) => c.reverse(),
         }
     }
 }

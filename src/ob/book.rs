@@ -3,14 +3,18 @@ use super::{
     orders::{
         flat::{FlatOrder, OrderSide},
         limit::{AskLimitOrder, BidLimitOrder, LimitOrder},
+        market::{AskMarketOrder, BidMarketOrder, MarketOrder},
     },
 };
 use std::{cell::RefCell, cmp::Ordering, collections::BinaryHeap};
 
 #[derive(Clone, Debug, Default)]
 pub struct OrderBook {
-    asks: BinaryHeap<AskLimitOrder>,
-    bids: BinaryHeap<BidLimitOrder>,
+    limit_asks: BinaryHeap<AskLimitOrder>,
+    limit_bids: BinaryHeap<BidLimitOrder>,
+
+    market_asks: BinaryHeap<AskMarketOrder>,
+    market_bids: BinaryHeap<BidMarketOrder>,
 
     id: RefCell<u64>,
     time: RefCell<i64>,
@@ -20,7 +24,7 @@ impl OrderBook {
     pub fn new_order(
         &self,
         side: OrderSide,
-        price: Amount,
+        price: Option<Amount>,
         size: i64,
         inc_time: bool,
     ) -> FlatOrder {
@@ -37,14 +41,17 @@ impl OrderBook {
             timestamp,
             id,
             side,
-            price: Some(price),
+            price,
             size,
         }
     }
 
     pub fn clear_orders(&mut self) {
-        self.asks.clear();
-        self.bids.clear();
+        self.limit_asks.clear();
+        self.limit_bids.clear();
+
+        self.market_asks.clear();
+        self.market_bids.clear();
     }
 
     pub fn add_orders(&mut self, data: Vec<FlatOrder>) {
@@ -52,13 +59,17 @@ impl OrderBook {
     }
 
     pub fn add_order(&mut self, order: FlatOrder) {
-        let Result::Ok(order) = order.try_into() else {
-            return;
-        };
-        match order {
-            LimitOrder::BidOrder { data } => self.bids.push(data.into()),
-            LimitOrder::AskOrder { data } => self.asks.push(data.into()),
-        };
+        if let Result::Ok(order) = order.try_into() {
+            match order {
+                MarketOrder::BidOrder { data } => self.market_bids.push(data.into()),
+                MarketOrder::AskOrder { data } => self.market_asks.push(data.into()),
+            };
+        } else if let Result::Ok(order) = order.try_into() {
+            match order {
+                LimitOrder::BidOrder { data } => self.limit_bids.push(data.into()),
+                LimitOrder::AskOrder { data } => self.limit_asks.push(data.into()),
+            };
+        }
     }
 
     pub fn from_orders(data: Vec<FlatOrder>) -> Self {
@@ -79,10 +90,9 @@ pub struct Transaction {
 }
 
 impl OrderBook {
-    // might include commission ratio and fees
-    pub fn match_order(&mut self) -> Option<Transaction> {
-        let best_bid = self.bids.peek()?;
-        let best_ask = self.asks.peek()?;
+    pub fn match_limit_orders(&mut self) -> Option<Transaction> {
+        let best_bid = self.limit_bids.peek()?;
+        let best_ask = self.limit_asks.peek()?;
 
         if let Ordering::Less = best_bid.data.price.cmp(&best_ask.data.price) {
             return None;
@@ -103,17 +113,17 @@ impl OrderBook {
             },
         };
 
-        let mut best_bid_mut = self.bids.pop()?;
-        let mut best_ask_mut = self.asks.pop()?;
+        let mut best_bid_mut = self.limit_bids.pop()?;
+        let mut best_ask_mut = self.limit_asks.pop()?;
 
         if best_bid_mut.data.size > transaction_size {
             best_bid_mut.data.size -= transaction_size;
-            self.bids.push(best_bid_mut);
+            self.limit_bids.push(best_bid_mut);
         }
 
         if best_ask_mut.data.size > transaction_size {
             best_ask_mut.data.size -= transaction_size;
-            self.asks.push(best_ask_mut);
+            self.limit_asks.push(best_ask_mut);
         }
 
         if transaction.diff.as_int < 0 {
@@ -125,7 +135,7 @@ impl OrderBook {
 
     pub fn match_all(&mut self) -> Vec<Transaction> {
         let mut transactions = Vec::new();
-        while let Some(transaction) = self.match_order() {
+        while let Some(transaction) = self.match_limit_orders() {
             transactions.push(transaction);
         }
         transactions
@@ -133,14 +143,14 @@ impl OrderBook {
 
     pub fn all_orders(&self) -> Vec<FlatOrder> {
         let asks: Vec<FlatOrder> = self
-            .asks
+            .limit_asks
             .clone()
             .into_vec()
             .into_iter()
             .map(Into::into)
             .collect();
         let bids: Vec<FlatOrder> = self
-            .bids
+            .limit_bids
             .clone()
             .into_vec()
             .into_iter()
@@ -182,7 +192,7 @@ mod prop_tests {
 
         let orders: Vec<_> = order_data
             .into_iter()
-            .map(|(side, price, size)| ob.new_order(side, price, size as i64, false))
+            .map(|(side, price, size)| ob.new_order(side, Some(price), size as i64, false))
             .collect();
 
         orders.into_iter().for_each(|order| ob.add_order(order));
@@ -213,14 +223,14 @@ mod simple_tests {
             (OrderSide::Ask, Amount { as_int: 1 }, 1),
             (OrderSide::Bid, Amount { as_int: 1 }, 1),
         ]
-        .map(|(side, price, size)| ob.new_order(side, price, size, false))
+        .map(|(side, price, size)| ob.new_order(side, Some(price), size, false))
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
         let transactions = ob.match_all();
 
-        assert_eq!(ob.asks.len(), 0);
-        assert_eq!(ob.bids.len(), 0);
+        assert_eq!(ob.limit_asks.len(), 0);
+        assert_eq!(ob.limit_bids.len(), 0);
         assert_eq!(transactions.len(), 1);
         assert_eq!(
             transactions.first(),
@@ -243,14 +253,14 @@ mod simple_tests {
             (OrderSide::Ask, Amount { as_int: 2 }, 1),
             (OrderSide::Bid, Amount { as_int: 1 }, 1),
         ]
-        .map(|(side, price, size)| ob.new_order(side, price, size, false))
+        .map(|(side, price, size)| ob.new_order(side, Some(price), size, false))
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
         let transactions = ob.match_all();
 
-        assert_eq!(ob.asks.len(), 1);
-        assert_eq!(ob.bids.len(), 1);
+        assert_eq!(ob.limit_asks.len(), 1);
+        assert_eq!(ob.limit_bids.len(), 1);
         assert_eq!(transactions.len(), 0);
     }
 
@@ -262,14 +272,14 @@ mod simple_tests {
             (OrderSide::Ask, Amount { as_int: 1 }, 1),
             (OrderSide::Bid, Amount { as_int: 2 }, 1),
         ]
-        .map(|(side, price, size)| ob.new_order(side, price, size, false))
+        .map(|(side, price, size)| ob.new_order(side, Some(price), size, false))
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
         let transactions = ob.match_all();
 
-        assert_eq!(ob.asks.len(), 0);
-        assert_eq!(ob.bids.len(), 0);
+        assert_eq!(ob.limit_asks.len(), 0);
+        assert_eq!(ob.limit_bids.len(), 0);
         assert_eq!(transactions.len(), 1);
         assert_eq!(
             transactions.first(),
@@ -293,21 +303,21 @@ mod simple_tests {
             (OrderSide::Ask, Amount { as_int: 1 }, 1),
             (OrderSide::Bid, Amount { as_int: 1 }, 2),
         ]
-        .map(|(side, price, size)| ob.new_order(side, price, size, true))
+        .map(|(side, price, size)| ob.new_order(side, Some(price), size, true))
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
         let transactions = ob.match_all();
 
-        assert_eq!(ob.asks.len(), 0);
-        assert_eq!(ob.bids.len(), 0);
+        assert_eq!(ob.limit_asks.len(), 0);
+        assert_eq!(ob.limit_bids.len(), 0);
         assert_eq!(transactions.len(), 2);
 
         assert_eq!(
             transactions.first(),
             Some(&Transaction {
                 bid_id: 2,
-                ask_id: 1,
+                ask_id: 0,
                 size: 1,
                 bid_loss: Amount { as_int: 1 },
                 ask_gain: Amount { as_int: 1 },
@@ -319,7 +329,7 @@ mod simple_tests {
             transactions.get(1),
             Some(&Transaction {
                 bid_id: 2,
-                ask_id: 0,
+                ask_id: 1,
                 size: 1,
                 bid_loss: Amount { as_int: 1 },
                 ask_gain: Amount { as_int: 1 },
@@ -337,20 +347,20 @@ mod simple_tests {
             (OrderSide::Bid, Amount { as_int: 1 }, 1),
             (OrderSide::Bid, Amount { as_int: 1 }, 1),
         ]
-        .map(|(side, price, size)| ob.new_order(side, price, size, true))
+        .map(|(side, price, size)| ob.new_order(side, Some(price), size, true))
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
         let transactions = ob.match_all();
 
-        assert_eq!(ob.asks.len(), 0);
-        assert_eq!(ob.bids.len(), 0);
+        assert_eq!(ob.limit_asks.len(), 0);
+        assert_eq!(ob.limit_bids.len(), 0);
         assert_eq!(transactions.len(), 2);
 
         assert_eq!(
             transactions.first(),
             Some(&Transaction {
-                bid_id: 2,
+                bid_id: 1,
                 ask_id: 0,
                 size: 1,
                 bid_loss: Amount { as_int: 1 },
@@ -362,7 +372,7 @@ mod simple_tests {
         assert_eq!(
             transactions.get(1),
             Some(&Transaction {
-                bid_id: 1,
+                bid_id: 2,
                 ask_id: 0,
                 size: 1,
                 bid_loss: Amount { as_int: 1 },

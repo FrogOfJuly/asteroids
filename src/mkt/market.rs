@@ -149,7 +149,7 @@ impl Market {
                 .borrow_mut()
                 .produce_orders(&self.history)
                 .into_iter()
-                .map(|(side, price, size)| self.book.new_order(side, price, size, false))
+                .map(|(side, price, size)| self.book.new_order(side, Some(price), size, false))
                 .collect();
 
             orders.iter().for_each(|&order| {
