@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, fmt::Display};
 use crate::ob::{
     amount::Amount,
     book::{OrderBook, Transaction},
-    orders::{flat::FlatOrder, limit::LimitOrder, market::MarketOrder},
+    orders::{flat::Order, limit::LimitOrder, market::MarketOrder},
 };
 
 use super::agent::{Agent, AgentId};
@@ -30,8 +30,8 @@ impl Account {
 #[derive(Default, Debug)]
 pub struct History {
     pub transactions: Vec<Transaction>,
-    pub rejected_orders: Vec<FlatOrder>,
-    pub unfulfilled_orders: Vec<FlatOrder>,
+    pub rejected_orders: Vec<Order>,
+    pub unfulfilled_orders: Vec<Order>,
 }
 
 impl History {
@@ -85,7 +85,7 @@ impl Market {
     }
 
     pub fn owner(&self, order: &LimitOrder) -> Option<AgentId> {
-        let order_id = Into::<FlatOrder>::into(*order).id;
+        let order_id = Into::<Order>::into(*order).id;
         self.order_map.get(&order_id).cloned()
     }
 
@@ -188,8 +188,8 @@ impl Market {
         }
     }
 
-    fn process_agent_actions(&mut self) -> Vec<FlatOrder> {
-        let mut rejected_orders: Vec<FlatOrder> = Vec::new();
+    fn process_agent_actions(&mut self) -> Vec<Order> {
+        let mut rejected_orders: Vec<Order> = Vec::new();
         let mut agents: HashMap<AgentId, RefCell<Box<dyn Agent>>> = Default::default();
 
         std::mem::swap(&mut self.agents, &mut agents);
@@ -199,7 +199,7 @@ impl Market {
                 .borrow_mut()
                 .produce_orders(&self.history)
                 .into_iter()
-                .map(|(side, price, size)| self.book.new_order(side, Some(price), size, false))
+                .map(|(side, price, size)| self.book.new_order_raw(side, Some(price), size, false))
                 .collect();
 
             orders.iter().for_each(|&order| {
@@ -212,7 +212,7 @@ impl Market {
                 };
 
                 if reserved {
-                    let order_id = Into::<FlatOrder>::into(order).id;
+                    let order_id = Into::<Order>::into(order).id;
                     self.order_map.insert(order_id, *agent_id);
                     self.book.add_order(order);
                 } else {

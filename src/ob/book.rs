@@ -1,7 +1,7 @@
 use super::{
     amount::Amount,
     orders::{
-        flat::{FlatOrder, OrderSide},
+        flat::{Order, OrderData, OrderSide},
         limit::{AskLimitOrder, BidLimitOrder, LimitOrder},
         market::{AskMarketOrder, BidMarketOrder, MarketOrder},
     },
@@ -21,13 +21,29 @@ pub struct OrderBook {
 }
 
 impl OrderBook {
-    pub fn new_order(
+    pub fn new_order_checked(&self, data: OrderData, inc_time: bool) -> Option<Order> {
+        if data.price.is_some_and(|x| x.as_int <= 0) {
+            return None;
+        }
+
+        if data.size <= 0 {
+            return None;
+        }
+
+        Some(self.new_order(data, inc_time))
+    }
+
+    pub fn new_order(&self, data: OrderData, inc_time: bool) -> Order {
+        self.new_order_raw(data.side, data.price, data.size, inc_time)
+    }
+
+    pub fn new_order_raw(
         &self,
         side: OrderSide,
         price: Option<Amount>,
         size: i64,
         inc_time: bool,
-    ) -> FlatOrder {
+    ) -> Order {
         let id = *self.id.borrow();
         *self.id.borrow_mut() += 1;
 
@@ -37,7 +53,7 @@ impl OrderBook {
             *self.time.borrow_mut() += 1;
         }
 
-        FlatOrder {
+        Order {
             timestamp,
             id,
             side,
@@ -54,11 +70,11 @@ impl OrderBook {
         self.market_bids.clear();
     }
 
-    pub fn add_orders(&mut self, data: Vec<FlatOrder>) {
+    pub fn add_orders(&mut self, data: Vec<Order>) {
         data.into_iter().for_each(|o| self.add_order(o));
     }
 
-    pub fn add_order(&mut self, order: FlatOrder) {
+    pub fn add_order(&mut self, order: Order) {
         if let Result::Ok(order) = order.try_into() {
             match order {
                 MarketOrder::BidOrder { data } => self.market_bids.push(data.into()),
@@ -72,7 +88,7 @@ impl OrderBook {
         }
     }
 
-    pub fn from_orders(data: Vec<FlatOrder>) -> Self {
+    pub fn from_orders(data: Vec<Order>) -> Self {
         let mut b = Self::default();
         b.add_orders(data);
         b
@@ -120,15 +136,15 @@ impl OrderBook {
         transactions
     }
 
-    pub fn all_orders(&self) -> Vec<FlatOrder> {
-        let limit_asks: Vec<FlatOrder> = self
+    pub fn all_orders(&self) -> Vec<Order> {
+        let limit_asks: Vec<Order> = self
             .limit_asks
             .clone()
             .into_vec()
             .into_iter()
             .map(Into::into)
             .collect();
-        let limit_bids: Vec<FlatOrder> = self
+        let limit_bids: Vec<Order> = self
             .limit_bids
             .clone()
             .into_vec()
@@ -136,7 +152,7 @@ impl OrderBook {
             .map(Into::into)
             .collect();
 
-        let market_asks: Vec<FlatOrder> = self
+        let market_asks: Vec<Order> = self
             .market_asks
             .clone()
             .into_vec()
@@ -144,7 +160,7 @@ impl OrderBook {
             .map(Into::into)
             .collect();
 
-        let market_bids: Vec<FlatOrder> = self
+        let market_bids: Vec<Order> = self
             .market_bids
             .clone()
             .into_vec()
@@ -341,7 +357,12 @@ mod prop_tests {
 
         let orders: Vec<_> = order_data
             .into_iter()
-            .map(|(side, price, size)| ob.new_order(side, Some(price), size as i64, false))
+            .map(|(side, price, size)| OrderData {
+                side,
+                price: Some(price),
+                size: size as i64,
+            })
+            .flat_map(|data| ob.new_order_checked(data, false))
             .collect();
 
         orders.into_iter().for_each(|order| ob.add_order(order));
@@ -373,7 +394,12 @@ mod prop_tests {
         // println!("creating orders..");
         let orders: Vec<_> = order_data
             .iter()
-            .map(|(side, price, size)| ob.new_order(*side, Some(*price), size.as_int, false))
+            .map(|(side, price, size)| OrderData {
+                side: *side,
+                price: Some(*price),
+                size: size.as_int,
+            })
+            .flat_map(|data| ob.new_order_checked(data, false))
             .collect();
 
         // println!("adding orders..");
@@ -389,19 +415,24 @@ mod prop_tests {
 
         // println!("creating market orders..");
 
-        let market_ask = ob.new_order(OrderSide::Ask, None, bid_amount, false);
-        let market_bid = ob.new_order(OrderSide::Bid, None, ask_amount, false);
+        let Some(market_ask) =
+            ob.new_order_checked(format!("A:{bid_amount}").try_into().unwrap(), false)
+        else {
+            return true;
+        };
+        let Some(market_bid) =
+            ob.new_order_checked(format!("B:{ask_amount}").try_into().unwrap(), false)
+        else {
+            return true;
+        };
 
         // println!("adding market orders..");
 
-        if bid_amount > 0 {
-            // println!("ask_order: {:?}", market_ask);
-            ob.add_order(market_ask)
-        };
-        if ask_amount > 0 {
-            // println!("bid_order: {:?}", market_bid);
-            ob.add_order(market_bid)
-        };
+        // println!("ask_order: {:?}", market_ask);
+        ob.add_order(market_ask);
+
+        // println!("bid_order: {:?}", market_bid);
+        ob.add_order(market_bid);
 
         // println!("matching..");
         // print!("{:?} -> ", ob.all_orders().len());
@@ -428,7 +459,7 @@ mod limit_tests {
             (OrderSide::Ask, Amount { as_int: 1 }, 1),
             (OrderSide::Bid, Amount { as_int: 1 }, 1),
         ]
-        .map(|(side, price, size)| ob.new_order(side, Some(price), size, false))
+        .map(|(side, price, size)| ob.new_order_raw(side, Some(price), size, false))
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
@@ -458,7 +489,7 @@ mod limit_tests {
             (OrderSide::Ask, Amount { as_int: 2 }, 1),
             (OrderSide::Bid, Amount { as_int: 1 }, 1),
         ]
-        .map(|(side, price, size)| ob.new_order(side, Some(price), size, false))
+        .map(|(side, price, size)| ob.new_order_raw(side, Some(price), size, false))
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
@@ -477,7 +508,7 @@ mod limit_tests {
             (OrderSide::Ask, Amount { as_int: 1 }, 1),
             (OrderSide::Bid, Amount { as_int: 2 }, 1),
         ]
-        .map(|(side, price, size)| ob.new_order(side, Some(price), size, false))
+        .map(|(side, price, size)| ob.new_order_raw(side, Some(price), size, false))
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
@@ -508,7 +539,7 @@ mod limit_tests {
             (OrderSide::Ask, Amount { as_int: 1 }, 1),
             (OrderSide::Bid, Amount { as_int: 1 }, 2),
         ]
-        .map(|(side, price, size)| ob.new_order(side, Some(price), size, true))
+        .map(|(side, price, size)| ob.new_order_raw(side, Some(price), size, true))
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
@@ -552,7 +583,7 @@ mod limit_tests {
             (OrderSide::Bid, Amount { as_int: 1 }, 1),
             (OrderSide::Bid, Amount { as_int: 1 }, 1),
         ]
-        .map(|(side, price, size)| ob.new_order(side, Some(price), size, true))
+        .map(|(side, price, size)| ob.new_order_raw(side, Some(price), size, true))
         .into_iter()
         .for_each(|order| ob.add_order(order));
 

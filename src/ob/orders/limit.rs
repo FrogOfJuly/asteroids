@@ -1,6 +1,6 @@
 use crate::ob::orders::flat::OrderSide;
 
-use super::flat::{FlatOrder, LimitOrderData};
+use super::flat::{LimitOrderData, Order};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum LimitOrder {
@@ -8,10 +8,10 @@ pub enum LimitOrder {
     AskOrder { data: LimitOrderData },
 }
 
-impl TryFrom<FlatOrder> for LimitOrder {
+impl TryFrom<Order> for LimitOrder {
     type Error = ();
 
-    fn try_from(value: FlatOrder) -> Result<Self, Self::Error> {
+    fn try_from(value: Order) -> Result<Self, Self::Error> {
         use LimitOrder::*;
         use OrderSide::*;
         let data: LimitOrderData = value.try_into()?;
@@ -22,7 +22,7 @@ impl TryFrom<FlatOrder> for LimitOrder {
     }
 }
 
-impl From<LimitOrder> for FlatOrder {
+impl From<LimitOrder> for Order {
     fn from(value: LimitOrder) -> Self {
         use LimitOrder::*;
         use OrderSide::*;
@@ -68,7 +68,7 @@ impl From<BidLimitOrder> for LimitOrder {
     }
 }
 
-impl From<BidLimitOrder> for FlatOrder {
+impl From<BidLimitOrder> for Order {
     fn from(value: BidLimitOrder) -> Self {
         LimitOrder::BidOrder { data: value.data }.into()
     }
@@ -119,7 +119,7 @@ impl From<AskLimitOrder> for LimitOrder {
     }
 }
 
-impl From<AskLimitOrder> for FlatOrder {
+impl From<AskLimitOrder> for Order {
     fn from(value: AskLimitOrder) -> Self {
         LimitOrder::AskOrder { data: value.data }.into()
     }

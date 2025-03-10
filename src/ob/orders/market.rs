@@ -1,6 +1,6 @@
 use crate::ob::orders::flat::OrderSide;
 
-use super::flat::{FlatOrder, MarketOrderData};
+use super::flat::{MarketOrderData, Order};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MarketOrder {
@@ -8,10 +8,10 @@ pub enum MarketOrder {
     AskOrder { data: MarketOrderData },
 }
 
-impl TryFrom<FlatOrder> for MarketOrder {
+impl TryFrom<Order> for MarketOrder {
     type Error = ();
 
-    fn try_from(value: FlatOrder) -> Result<Self, Self::Error> {
+    fn try_from(value: Order) -> Result<Self, Self::Error> {
         use MarketOrder::*;
         use OrderSide::*;
         let data: MarketOrderData = value.try_into()?;
@@ -22,7 +22,7 @@ impl TryFrom<FlatOrder> for MarketOrder {
     }
 }
 
-impl From<MarketOrder> for FlatOrder {
+impl From<MarketOrder> for Order {
     fn from(value: MarketOrder) -> Self {
         use MarketOrder::*;
         use OrderSide::*;
@@ -68,7 +68,7 @@ impl From<BidMarketOrder> for MarketOrder {
     }
 }
 
-impl From<BidMarketOrder> for FlatOrder {
+impl From<BidMarketOrder> for Order {
     fn from(value: BidMarketOrder) -> Self {
         MarketOrder::BidOrder { data: value.data }.into()
     }
@@ -113,7 +113,7 @@ impl From<AskMarketOrder> for MarketOrder {
     }
 }
 
-impl From<AskMarketOrder> for FlatOrder {
+impl From<AskMarketOrder> for Order {
     fn from(value: AskMarketOrder) -> Self {
         MarketOrder::AskOrder { data: value.data }.into()
     }
