@@ -87,9 +87,198 @@ pub struct Transaction {
     pub bid_loss: Amount,
     pub ask_gain: Amount,
     pub diff: Amount,
+
+    pub cancellable_bid: Option<FlatOrder>,
+    pub cancellable_ask: Option<FlatOrder>,
 }
 
 impl OrderBook {
+    pub fn match_all_market(&mut self, default_price: Option<Amount>) -> Vec<Transaction> {
+        let mut transactions = Vec::new();
+
+        while let Some(transaction) = self.match_ask_market_order() {
+            transactions.push(transaction);
+        }
+
+        while let Some(transaction) = self.match_bid_market_order() {
+            transactions.push(transaction);
+        }
+
+        let Some(default_price) = default_price else {
+            return transactions;
+        };
+
+        while let Some(transaction) = self.match_market_orders(default_price) {
+            transactions.push(transaction);
+        }
+
+        transactions
+    }
+
+    pub fn match_all_limit(&mut self) -> Vec<Transaction> {
+        let mut transactions = Vec::new();
+        while let Some(transaction) = self.match_limit_orders() {
+            transactions.push(transaction);
+        }
+        transactions
+    }
+
+    pub fn all_orders(&self) -> Vec<FlatOrder> {
+        let limit_asks: Vec<FlatOrder> = self
+            .limit_asks
+            .clone()
+            .into_vec()
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        let limit_bids: Vec<FlatOrder> = self
+            .limit_bids
+            .clone()
+            .into_vec()
+            .into_iter()
+            .map(Into::into)
+            .collect();
+
+        let market_asks: Vec<FlatOrder> = self
+            .market_asks
+            .clone()
+            .into_vec()
+            .into_iter()
+            .map(Into::into)
+            .collect();
+
+        let market_bids: Vec<FlatOrder> = self
+            .market_bids
+            .clone()
+            .into_vec()
+            .into_iter()
+            .map(Into::into)
+            .collect();
+
+        [limit_asks, limit_bids, market_asks, market_bids].concat()
+    }
+
+    pub fn time_inc(&self) {
+        *self.time.borrow_mut() += 1;
+    }
+
+    pub fn match_market_orders(&mut self, default_price: Amount) -> Option<Transaction> {
+        let best_bid = self.market_bids.peek()?;
+        let best_ask = self.market_asks.peek()?;
+
+        let transaction_size = best_bid.data.size.min(best_ask.data.size);
+
+        let bid_loss = default_price * transaction_size;
+        let ask_gain = bid_loss;
+
+        let transaction = Transaction {
+            bid_id: best_bid.data.id,
+            ask_id: best_ask.data.id,
+            size: transaction_size,
+            bid_loss,
+            ask_gain,
+            diff: Amount {
+                as_int: bid_loss.as_int - ask_gain.as_int,
+            },
+            cancellable_ask: Some((*best_ask).into()),
+            cancellable_bid: Some((*best_bid).into()),
+        };
+
+        let mut best_bid_mut = self.market_bids.pop()?;
+        let mut best_ask_mut = self.market_asks.pop()?;
+
+        if best_bid_mut.data.size > transaction_size {
+            best_bid_mut.data.size -= transaction_size;
+            self.market_bids.push(best_bid_mut);
+        }
+
+        if best_ask_mut.data.size > transaction_size {
+            best_ask_mut.data.size -= transaction_size;
+            self.market_asks.push(best_ask_mut);
+        }
+
+        if transaction.diff.as_int < 0 {
+            panic!("{:?} gives net negative!", transaction)
+        }
+
+        Some(transaction)
+    }
+
+    pub fn match_ask_market_order(&mut self) -> Option<Transaction> {
+        let market_order = self.market_bids.peek()?;
+        let best_bid = self.limit_bids.peek()?;
+
+        let transaction_size = market_order.data.size.min(best_bid.data.size);
+
+        let ask_gain = best_bid.data.price * transaction_size;
+        let bid_loss = ask_gain;
+
+        let transaction = Transaction {
+            bid_id: best_bid.data.id,
+            ask_id: market_order.data.id,
+            size: transaction_size,
+            bid_loss,
+            ask_gain,
+            diff: Amount {
+                as_int: bid_loss.as_int - ask_gain.as_int,
+            },
+            cancellable_ask: None,
+            cancellable_bid: Some((*best_bid).into()),
+        };
+
+        let mut best_ask_mut = self.market_asks.pop()?;
+        let mut best_bid_mut = self.limit_bids.pop()?;
+
+        if best_bid_mut.data.size > transaction_size {
+            best_bid_mut.data.size -= transaction_size;
+            self.market_asks.push(best_ask_mut);
+        }
+
+        if best_ask_mut.data.size > transaction_size {
+            best_ask_mut.data.size -= transaction_size;
+            self.limit_bids.push(best_bid_mut);
+        }
+
+        Some(transaction)
+    }
+    pub fn match_bid_market_order(&mut self) -> Option<Transaction> {
+        let market_order = self.market_bids.peek()?;
+        let best_ask = self.limit_asks.peek()?;
+
+        let transaction_size = market_order.data.size.min(best_ask.data.size);
+
+        let ask_gain = best_ask.data.price * transaction_size;
+        let bid_loss = ask_gain;
+
+        let transaction = Transaction {
+            bid_id: market_order.data.id,
+            ask_id: best_ask.data.id,
+            size: transaction_size,
+            bid_loss,
+            ask_gain,
+            diff: Amount {
+                as_int: bid_loss.as_int - ask_gain.as_int,
+            },
+            cancellable_bid: None,
+            cancellable_ask: Some((*best_ask).into()),
+        };
+
+        let mut best_bid_mut = self.market_bids.pop()?;
+        let mut best_ask_mut = self.limit_asks.pop()?;
+
+        if best_bid_mut.data.size > transaction_size {
+            best_bid_mut.data.size -= transaction_size;
+            self.market_bids.push(best_bid_mut);
+        }
+
+        if best_ask_mut.data.size > transaction_size {
+            best_ask_mut.data.size -= transaction_size;
+            self.limit_asks.push(best_ask_mut);
+        }
+
+        Some(transaction)
+    }
+
     pub fn match_limit_orders(&mut self) -> Option<Transaction> {
         let best_bid = self.limit_bids.peek()?;
         let best_ask = self.limit_asks.peek()?;
@@ -111,6 +300,8 @@ impl OrderBook {
             diff: Amount {
                 as_int: bid_loss.as_int - ask_gain.as_int,
             },
+            cancellable_bid: None,
+            cancellable_ask: None,
         };
 
         let mut best_bid_mut = self.limit_bids.pop()?;
@@ -131,37 +322,6 @@ impl OrderBook {
         }
 
         Some(transaction)
-    }
-
-    pub fn match_all(&mut self) -> Vec<Transaction> {
-        let mut transactions = Vec::new();
-        while let Some(transaction) = self.match_limit_orders() {
-            transactions.push(transaction);
-        }
-        transactions
-    }
-
-    pub fn all_orders(&self) -> Vec<FlatOrder> {
-        let asks: Vec<FlatOrder> = self
-            .limit_asks
-            .clone()
-            .into_vec()
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        let bids: Vec<FlatOrder> = self
-            .limit_bids
-            .clone()
-            .into_vec()
-            .into_iter()
-            .map(Into::into)
-            .collect();
-
-        [asks, bids].concat()
-    }
-
-    pub fn time_inc(&self) {
-        *self.time.borrow_mut() += 1;
     }
 }
 
@@ -199,13 +359,13 @@ mod prop_tests {
 
         // print!("{:?} -> ", ob.all_orders().len());
 
-        ob.match_all();
+        ob.match_all_limit();
 
         let remaining = ob.all_orders();
 
         // println!("{:?}", ob.all_orders().len());
 
-        ob.match_all();
+        ob.match_all_limit();
 
         remaining == ob.all_orders()
     }
@@ -227,7 +387,7 @@ mod simple_tests {
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
-        let transactions = ob.match_all();
+        let transactions = ob.match_all_limit();
 
         assert_eq!(ob.limit_asks.len(), 0);
         assert_eq!(ob.limit_bids.len(), 0);
@@ -240,7 +400,9 @@ mod simple_tests {
                 size: 1,
                 bid_loss: Amount { as_int: 1 },
                 ask_gain: Amount { as_int: 1 },
-                diff: Amount { as_int: 0 }
+                diff: Amount { as_int: 0 },
+                cancellable_ask: None,
+                cancellable_bid: None,
             })
         );
     }
@@ -257,7 +419,7 @@ mod simple_tests {
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
-        let transactions = ob.match_all();
+        let transactions = ob.match_all_limit();
 
         assert_eq!(ob.limit_asks.len(), 1);
         assert_eq!(ob.limit_bids.len(), 1);
@@ -276,7 +438,7 @@ mod simple_tests {
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
-        let transactions = ob.match_all();
+        let transactions = ob.match_all_limit();
 
         assert_eq!(ob.limit_asks.len(), 0);
         assert_eq!(ob.limit_bids.len(), 0);
@@ -289,7 +451,9 @@ mod simple_tests {
                 size: 1,
                 bid_loss: Amount { as_int: 2 },
                 ask_gain: Amount { as_int: 1 },
-                diff: Amount { as_int: 1 }
+                diff: Amount { as_int: 1 },
+                cancellable_ask: None,
+                cancellable_bid: None,
             })
         );
     }
@@ -307,7 +471,7 @@ mod simple_tests {
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
-        let transactions = ob.match_all();
+        let transactions = ob.match_all_limit();
 
         assert_eq!(ob.limit_asks.len(), 0);
         assert_eq!(ob.limit_bids.len(), 0);
@@ -321,7 +485,9 @@ mod simple_tests {
                 size: 1,
                 bid_loss: Amount { as_int: 1 },
                 ask_gain: Amount { as_int: 1 },
-                diff: Amount { as_int: 0 }
+                diff: Amount { as_int: 0 },
+                cancellable_ask: None,
+                cancellable_bid: None,
             })
         );
 
@@ -333,7 +499,9 @@ mod simple_tests {
                 size: 1,
                 bid_loss: Amount { as_int: 1 },
                 ask_gain: Amount { as_int: 1 },
-                diff: Amount { as_int: 0 }
+                diff: Amount { as_int: 0 },
+                cancellable_ask: None,
+                cancellable_bid: None,
             })
         );
     }
@@ -351,7 +519,7 @@ mod simple_tests {
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
-        let transactions = ob.match_all();
+        let transactions = ob.match_all_limit();
 
         assert_eq!(ob.limit_asks.len(), 0);
         assert_eq!(ob.limit_bids.len(), 0);
@@ -365,7 +533,9 @@ mod simple_tests {
                 size: 1,
                 bid_loss: Amount { as_int: 1 },
                 ask_gain: Amount { as_int: 1 },
-                diff: Amount { as_int: 0 }
+                diff: Amount { as_int: 0 },
+                cancellable_ask: None,
+                cancellable_bid: None,
             })
         );
 
@@ -377,7 +547,9 @@ mod simple_tests {
                 size: 1,
                 bid_loss: Amount { as_int: 1 },
                 ask_gain: Amount { as_int: 1 },
-                diff: Amount { as_int: 0 }
+                diff: Amount { as_int: 0 },
+                cancellable_ask: None,
+                cancellable_bid: None,
             })
         );
     }

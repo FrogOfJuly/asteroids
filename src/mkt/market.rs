@@ -83,8 +83,8 @@ impl Market {
 
         self.history = History::default();
 
-        self.history.rejected_orders = rejected_orders.into_iter().map(Into::into).collect();
-        let transactions = self.book.match_all();
+        self.history.rejected_orders = rejected_orders;
+        let transactions = self.book.match_all_limit();
 
         transactions
             .iter()
