@@ -69,6 +69,8 @@ pub struct Market {
 
     id: RefCell<u64>,
 
+    market_account : Account,
+
     accounts: HashMap<AgentId, Account>,
     agents: HashMap<AgentId, RefCell<Box<dyn Agent>>>,
     order_map: HashMap<u64, AgentId>,
@@ -108,13 +110,13 @@ impl Market {
 
         market_transactions
             .iter()
-            .for_each(|trns| self.satisfy_transaction(trns));
+            .for_each(|trns| self.fulfill_transaction(trns));
 
         let limit_transactions = self.book.match_all_limit();
 
         limit_transactions
             .iter()
-            .for_each(|trns| self.satisfy_transaction(trns));
+            .for_each(|trns| self.fulfill_transaction(trns));
 
         self.history.transactions = [market_transactions, limit_transactions].concat();
         self.history.unfulfilled_orders = self.book.all_orders();
@@ -226,7 +228,7 @@ impl Market {
         rejected_orders
     }
 
-    fn satisfy_transaction(&mut self, trns: &Transaction) {
+    fn fulfill_transaction(&mut self, trns: &Transaction) {
         let Some(bidder_id) = self.order_map.get(&trns.bid_id) else {
             panic!("{:?} has no bidder", trns);
         };
@@ -237,6 +239,8 @@ impl Market {
         let Some(bidder_acc) = self.accounts.get_mut(bidder_id) else {
             panic!("bidder of {:?} has no account", trns);
         };
+
+        self.market_account.money += trns.diff;
 
         bidder_acc.commodity += trns.size;
         bidder_acc.money -= trns.bid_loss;
