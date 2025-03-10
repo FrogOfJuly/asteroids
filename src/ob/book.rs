@@ -87,9 +87,6 @@ pub struct Transaction {
     pub bid_loss: Amount,
     pub ask_gain: Amount,
     pub diff: Amount,
-
-    pub cancellable_bid: Option<FlatOrder>,
-    pub cancellable_ask: Option<FlatOrder>,
 }
 
 impl OrderBook {
@@ -180,8 +177,6 @@ impl OrderBook {
             diff: Amount {
                 as_int: bid_loss.as_int - ask_gain.as_int,
             },
-            cancellable_ask: Some((*best_ask).into()),
-            cancellable_bid: Some((*best_bid).into()),
         };
 
         let mut best_bid_mut = self.market_bids.pop()?;
@@ -205,7 +200,7 @@ impl OrderBook {
     }
 
     pub fn match_ask_market_order(&mut self) -> Option<Transaction> {
-        let market_order = self.market_bids.peek()?;
+        let market_order = self.market_asks.peek()?;
         let best_bid = self.limit_bids.peek()?;
 
         let transaction_size = market_order.data.size.min(best_bid.data.size);
@@ -222,20 +217,18 @@ impl OrderBook {
             diff: Amount {
                 as_int: bid_loss.as_int - ask_gain.as_int,
             },
-            cancellable_ask: None,
-            cancellable_bid: Some((*best_bid).into()),
         };
 
         let mut best_ask_mut = self.market_asks.pop()?;
         let mut best_bid_mut = self.limit_bids.pop()?;
 
-        if best_bid_mut.data.size > transaction_size {
-            best_bid_mut.data.size -= transaction_size;
+        if best_ask_mut.data.size > transaction_size {
+            best_ask_mut.data.size -= transaction_size;
             self.market_asks.push(best_ask_mut);
         }
 
-        if best_ask_mut.data.size > transaction_size {
-            best_ask_mut.data.size -= transaction_size;
+        if best_bid_mut.data.size > transaction_size {
+            best_bid_mut.data.size -= transaction_size;
             self.limit_bids.push(best_bid_mut);
         }
 
@@ -259,8 +252,6 @@ impl OrderBook {
             diff: Amount {
                 as_int: bid_loss.as_int - ask_gain.as_int,
             },
-            cancellable_bid: None,
-            cancellable_ask: Some((*best_ask).into()),
         };
 
         let mut best_bid_mut = self.market_bids.pop()?;
@@ -300,8 +291,6 @@ impl OrderBook {
             diff: Amount {
                 as_int: bid_loss.as_int - ask_gain.as_int,
             },
-            cancellable_bid: None,
-            cancellable_ask: None,
         };
 
         let mut best_bid_mut = self.limit_bids.pop()?;
@@ -347,7 +336,7 @@ mod prop_tests {
     }
 
     #[quickcheck]
-    fn match_all_idempotent(order_data: Vec<(OrderSide, Amount, u32)>) -> bool {
+    fn match_all_limit_idempotent(order_data: Vec<(OrderSide, Amount, u32)>) -> bool {
         let mut ob = OrderBook::default();
 
         let orders: Vec<_> = order_data
@@ -369,10 +358,66 @@ mod prop_tests {
 
         remaining == ob.all_orders()
     }
+
+    #[quickcheck]
+    fn market_matches_all_limits(order_data: Vec<(OrderSide, Amount, Amount)>) -> bool {
+        if order_data.is_empty() {
+            return true;
+        }
+
+        // println!("order data: {:?}", order_data);
+
+        // println!("creating ob..");
+        let mut ob = OrderBook::default();
+
+        // println!("creating orders..");
+        let orders: Vec<_> = order_data
+            .iter()
+            .map(|(side, price, size)| ob.new_order(*side, Some(*price), size.as_int, false))
+            .collect();
+
+        // println!("adding orders..");
+        orders.into_iter().for_each(|order| ob.add_order(order));
+
+        // print!("counting amounts..");
+        let (bid_amount, ask_amount) = order_data.iter().fold((0, 0), |(l, r), d| match d.0 {
+            OrderSide::Bid => (l + d.2.as_int, r),
+            OrderSide::Ask => (l, r + d.2.as_int),
+        });
+
+        // println!("counted: {}, {}", bid_amount, ask_amount);
+
+        // println!("creating market orders..");
+
+        let market_ask = ob.new_order(OrderSide::Ask, None, bid_amount, false);
+        let market_bid = ob.new_order(OrderSide::Bid, None, ask_amount, false);
+
+        // println!("adding market orders..");
+
+        if bid_amount > 0 {
+            // println!("ask_order: {:?}", market_ask);
+            ob.add_order(market_ask)
+        };
+        if ask_amount > 0 {
+            // println!("bid_order: {:?}", market_bid);
+            ob.add_order(market_bid)
+        };
+
+        // println!("matching..");
+        // print!("{:?} -> ", ob.all_orders().len());
+
+        ob.match_all_market(None);
+
+        // println!("{:?}", ob.all_orders().len());
+
+        // println!("remaining: {:?}", ob.all_orders());
+
+        ob.all_orders().is_empty()
+    }
 }
 
 #[cfg(test)]
-mod simple_tests {
+mod limit_tests {
     use super::*;
 
     #[test]
@@ -400,9 +445,7 @@ mod simple_tests {
                 size: 1,
                 bid_loss: Amount { as_int: 1 },
                 ask_gain: Amount { as_int: 1 },
-                diff: Amount { as_int: 0 },
-                cancellable_ask: None,
-                cancellable_bid: None,
+                diff: Amount { as_int: 0 }
             })
         );
     }
@@ -451,9 +494,7 @@ mod simple_tests {
                 size: 1,
                 bid_loss: Amount { as_int: 2 },
                 ask_gain: Amount { as_int: 1 },
-                diff: Amount { as_int: 1 },
-                cancellable_ask: None,
-                cancellable_bid: None,
+                diff: Amount { as_int: 1 }
             })
         );
     }
@@ -485,9 +526,7 @@ mod simple_tests {
                 size: 1,
                 bid_loss: Amount { as_int: 1 },
                 ask_gain: Amount { as_int: 1 },
-                diff: Amount { as_int: 0 },
-                cancellable_ask: None,
-                cancellable_bid: None,
+                diff: Amount { as_int: 0 }
             })
         );
 
@@ -499,9 +538,7 @@ mod simple_tests {
                 size: 1,
                 bid_loss: Amount { as_int: 1 },
                 ask_gain: Amount { as_int: 1 },
-                diff: Amount { as_int: 0 },
-                cancellable_ask: None,
-                cancellable_bid: None,
+                diff: Amount { as_int: 0 }
             })
         );
     }
@@ -533,9 +570,7 @@ mod simple_tests {
                 size: 1,
                 bid_loss: Amount { as_int: 1 },
                 ask_gain: Amount { as_int: 1 },
-                diff: Amount { as_int: 0 },
-                cancellable_ask: None,
-                cancellable_bid: None,
+                diff: Amount { as_int: 0 }
             })
         );
 
@@ -547,9 +582,7 @@ mod simple_tests {
                 size: 1,
                 bid_loss: Amount { as_int: 1 },
                 ask_gain: Amount { as_int: 1 },
-                diff: Amount { as_int: 0 },
-                cancellable_ask: None,
-                cancellable_bid: None,
+                diff: Amount { as_int: 0 }
             })
         );
     }

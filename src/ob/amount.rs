@@ -1,5 +1,4 @@
-use std::ops::{AddAssign, Mul, MulAssign, SubAssign};
-
+use std::ops::{Add, AddAssign, Mul, MulAssign, SubAssign};
 
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct Amount {
@@ -21,6 +20,16 @@ impl Default for Amount {
 impl AddAssign for Amount {
     fn add_assign(&mut self, rhs: Self) {
         self.as_int += rhs.as_int;
+    }
+}
+
+impl Add for Amount {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Amount {
+            as_int: self.as_int + rhs.as_int,
+        }
     }
 }
 

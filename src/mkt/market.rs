@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, fmt::Display};
 use crate::ob::{
     amount::Amount,
     book::{OrderBook, Transaction},
-    orders::{flat::FlatOrder, limit::LimitOrder},
+    orders::{flat::FlatOrder, limit::LimitOrder, market::MarketOrder},
 };
 
 use super::agent::{Agent, AgentId};
@@ -32,6 +32,24 @@ pub struct History {
     pub transactions: Vec<Transaction>,
     pub rejected_orders: Vec<FlatOrder>,
     pub unfulfilled_orders: Vec<FlatOrder>,
+}
+
+impl History {
+    pub fn market_price(&self) -> Option<Amount> {
+        let sum: i64 = self
+            .transactions
+            .iter()
+            .map(|tr| (tr.ask_gain + tr.bid_loss).as_int / 2)
+            .sum();
+
+        if self.transactions.is_empty() {
+            None
+        } else {
+            Some(Amount {
+                as_int: sum / (self.transactions.len() as i64),
+            })
+        }
+    }
 }
 
 impl Display for History {
@@ -81,16 +99,24 @@ impl Market {
 
         let rejected_orders = self.process_agent_actions();
 
+        let market_price = self.history.market_price();
         self.history = History::default();
 
         self.history.rejected_orders = rejected_orders;
-        let transactions = self.book.match_all_limit();
 
-        transactions
+        let market_transactions = self.book.match_all_market(market_price);
+
+        market_transactions
             .iter()
             .for_each(|trns| self.satisfy_transaction(trns));
 
-        self.history.transactions = transactions;
+        let limit_transactions = self.book.match_all_limit();
+
+        limit_transactions
+            .iter()
+            .for_each(|trns| self.satisfy_transaction(trns));
+
+        self.history.transactions = [market_transactions, limit_transactions].concat();
         self.history.unfulfilled_orders = self.book.all_orders();
     }
 }
@@ -103,7 +129,31 @@ impl Market {
         });
     }
 
-    fn reserve(&mut self, agent_id: AgentId, order: &LimitOrder) -> bool {
+    fn reserve_market(&mut self, agent_id: AgentId, order: &MarketOrder) -> bool {
+        let Some(account_data) = self.account(agent_id) else {
+            println!("Can't find account for {:?}", agent_id);
+            return false;
+        };
+
+        match order {
+            MarketOrder::BidOrder { .. } => true,
+            MarketOrder::AskOrder { data } => {
+                let maximum_commodity_transfer = data.size;
+
+                if maximum_commodity_transfer + account_data.reserved_commodity
+                    <= account_data.commodity
+                {
+                    self.accounts.get_mut(&agent_id).unwrap().reserved_commodity +=
+                        maximum_commodity_transfer;
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
+    fn reserve_limit(&mut self, agent_id: AgentId, order: &LimitOrder) -> bool {
         let Some(account_data) = self.account(agent_id) else {
             println!("Can't find account for {:?}", agent_id);
             return false;
@@ -114,7 +164,7 @@ impl Market {
                 let maximum_transaction = data.price * data.size;
 
                 if maximum_transaction.as_int + account_data.reserved_money.as_int
-                    < account_data.money.as_int
+                    <= account_data.money.as_int
                 {
                     self.accounts.get_mut(&agent_id).unwrap().reserved_money += maximum_transaction;
                     true
@@ -126,7 +176,7 @@ impl Market {
                 let maximum_commodity_transfer = data.size;
 
                 if maximum_commodity_transfer + account_data.reserved_commodity
-                    < account_data.commodity
+                    <= account_data.commodity
                 {
                     self.accounts.get_mut(&agent_id).unwrap().reserved_commodity +=
                         maximum_commodity_transfer;
@@ -153,16 +203,20 @@ impl Market {
                 .collect();
 
             orders.iter().for_each(|&order| {
-                let Result::Ok(limit_order) = order.try_into() else {
-                    return;
-                };
-                let reserved = self.reserve(*agent_id, &limit_order);
-                if !reserved {
-                    rejected_orders.push(order);
+                let reserved = if let Result::Ok(limit_order) = order.try_into() {
+                    self.reserve_limit(*agent_id, &limit_order)
+                } else if let Result::Ok(market_order) = order.try_into() {
+                    self.reserve_market(*agent_id, &market_order)
                 } else {
+                    false
+                };
+
+                if reserved {
                     let order_id = Into::<FlatOrder>::into(order).id;
                     self.order_map.insert(order_id, *agent_id);
                     self.book.add_order(order);
+                } else {
+                    rejected_orders.push(order);
                 }
             });
         });
@@ -174,10 +228,7 @@ impl Market {
 
     fn satisfy_transaction(&mut self, trns: &Transaction) {
         let Some(bidder_id) = self.order_map.get(&trns.bid_id) else {
-            panic!(
-                "{:?} has no bidder: {:?}\n{:?}",
-                trns, self.order_map, self.history
-            );
+            panic!("{:?} has no bidder", trns);
         };
         let Some(asker_id) = self.order_map.get(&trns.ask_id) else {
             panic!("{:?} has no asker", trns);
