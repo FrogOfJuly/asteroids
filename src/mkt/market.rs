@@ -3,7 +3,11 @@ use std::{cell::RefCell, collections::HashMap, fmt::Display};
 use crate::ob::{
     amount::Amount,
     book::{OrderBook, Transaction},
-    orders::{flat::Order, limit::LimitOrder, market::MarketOrder},
+    orders::{
+        flat::{Order, OrderData, OrderSide},
+        limit::LimitOrder,
+        market::MarketOrder,
+    },
 };
 
 use super::agent::{Agent, AgentId};
@@ -23,6 +27,67 @@ impl Account {
             commodity: 10,
             money: Amount { as_int: 10 },
             ..Default::default()
+        }
+    }
+
+    pub fn reservable(&self, orders: &[&OrderData]) -> bool {
+        let (money, comm) = orders.iter().fold((0, 0), |(l, r), &data| match data.side {
+            OrderSide::Bid => (l + data.price.unwrap_or_default().as_int * data.size, r),
+            OrderSide::Ask => (l, r + data.size),
+        });
+
+        self.commodity >= self.reserved_commodity + comm
+            && self.money >= self.reserved_money + Amount { as_int: money }
+    }
+
+    fn reserve_order(&mut self, order: Order) -> bool {
+        if let Result::Ok(limit_order) = order.try_into() {
+            self.reserve_limit_order(&limit_order)
+        } else if let Result::Ok(market_order) = order.try_into() {
+            self.reserve_market_order(&market_order)
+        } else {
+            false
+        }
+    }
+
+    fn reserve_market_order(&mut self, order: &MarketOrder) -> bool {
+        match order {
+            MarketOrder::BidOrder { .. } => true,
+            MarketOrder::AskOrder { data } => {
+                let maximum_commodity_transfer = data.size;
+
+                if maximum_commodity_transfer + self.reserved_commodity <= self.commodity {
+                    self.reserved_commodity += maximum_commodity_transfer;
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
+    fn reserve_limit_order(&mut self, order: &LimitOrder) -> bool {
+        match order {
+            LimitOrder::BidOrder { data } => {
+                let maximum_transaction = data.price * data.size;
+
+                if maximum_transaction.as_int + self.reserved_money.as_int <= self.money.as_int {
+                    self.reserved_money += maximum_transaction;
+                    true
+                } else {
+                    false
+                }
+            }
+            LimitOrder::AskOrder { data } => {
+                let maximum_commodity_transfer = data.size;
+
+                if maximum_commodity_transfer + self.reserved_commodity <= self.commodity {
+                    self.reserved_commodity += maximum_commodity_transfer;
+                    true
+                } else {
+                    false
+                }
+            }
         }
     }
 }
@@ -73,9 +138,10 @@ pub struct MarketInfo {
 }
 
 pub struct Market {
-    pub book: OrderBook,
     pub history: History,
     pub info: MarketInfo,
+
+    book: OrderBook,
 
     id: RefCell<u64>,
 
@@ -120,7 +186,7 @@ impl Market {
 
     pub fn step(&mut self) -> usize {
         self.order_map.clear();
-        self.clear_reserves();
+        self.clear_reservations();
 
         let rejected_orders = self.process_agent_actions();
 
@@ -150,70 +216,11 @@ impl Market {
 }
 
 impl Market {
-    fn clear_reserves(&mut self) {
+    fn clear_reservations(&mut self) {
         self.accounts.iter_mut().for_each(|(_, acc_mut)| {
             acc_mut.reserved_commodity = Default::default();
             acc_mut.reserved_money = Default::default();
         });
-    }
-
-    fn reserve_market(&mut self, agent_id: AgentId, order: &MarketOrder) -> bool {
-        let Some(account_data) = self.account(agent_id) else {
-            println!("Can't find account for {:?}", agent_id);
-            return false;
-        };
-
-        match order {
-            MarketOrder::BidOrder { .. } => true,
-            MarketOrder::AskOrder { data } => {
-                let maximum_commodity_transfer = data.size;
-
-                if maximum_commodity_transfer + account_data.reserved_commodity
-                    <= account_data.commodity
-                {
-                    self.accounts.get_mut(&agent_id).unwrap().reserved_commodity +=
-                        maximum_commodity_transfer;
-                    true
-                } else {
-                    false
-                }
-            }
-        }
-    }
-
-    fn reserve_limit(&mut self, agent_id: AgentId, order: &LimitOrder) -> bool {
-        let Some(account_data) = self.account(agent_id) else {
-            println!("Can't find account for {:?}", agent_id);
-            return false;
-        };
-
-        match order {
-            LimitOrder::BidOrder { data } => {
-                let maximum_transaction = data.price * data.size;
-
-                if maximum_transaction.as_int + account_data.reserved_money.as_int
-                    <= account_data.money.as_int
-                {
-                    self.accounts.get_mut(&agent_id).unwrap().reserved_money += maximum_transaction;
-                    true
-                } else {
-                    false
-                }
-            }
-            LimitOrder::AskOrder { data } => {
-                let maximum_commodity_transfer = data.size;
-
-                if maximum_commodity_transfer + account_data.reserved_commodity
-                    <= account_data.commodity
-                {
-                    self.accounts.get_mut(&agent_id).unwrap().reserved_commodity +=
-                        maximum_commodity_transfer;
-                    true
-                } else {
-                    false
-                }
-            }
-        }
     }
 
     fn process_agent_actions(&mut self) -> Vec<Order> {
@@ -222,26 +229,28 @@ impl Market {
 
         std::mem::swap(&mut self.agents, &mut agents);
 
-        agents.iter().for_each(|(agent_id, agent_ref)| {
+        agents.iter().for_each(|(&agent_id, agent_ref)| {
+            let Some(account_copy) = self.account(agent_id) else {
+                return;
+            };
+
             let orders: Vec<_> = agent_ref
                 .borrow_mut()
-                .produce_orders(&self.info, &self.history)
+                .produce_orders(&account_copy, &self.info, &self.history)
                 .into_iter()
                 .flat_map(|data| self.book.new_order_checked(data))
                 .collect();
 
-            orders.iter().for_each(|&order| {
-                let reserved = if let Result::Ok(limit_order) = order.try_into() {
-                    self.reserve_limit(*agent_id, &limit_order)
-                } else if let Result::Ok(market_order) = order.try_into() {
-                    self.reserve_market(*agent_id, &market_order)
-                } else {
-                    false
-                };
+            orders.into_iter().for_each(|order| {
+                let reserved = self
+                    .accounts
+                    .get_mut(&agent_id)
+                    .unwrap()
+                    .reserve_order(order);
 
                 if reserved {
                     let order_id = Into::<Order>::into(order).id;
-                    self.order_map.insert(order_id, *agent_id);
+                    self.order_map.insert(order_id, agent_id);
                     self.book.add_order(order);
                 } else {
                     rejected_orders.push(order);
