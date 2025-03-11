@@ -1,5 +1,5 @@
-use super::market::History;
-use crate::ob::{amount::Amount, orders::flat::OrderSide};
+use super::market::{History, MarketInfo};
+use crate::ob::orders::flat::OrderData;
 
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct AgentId(u64);
@@ -11,7 +11,7 @@ impl AgentId {
 }
 
 pub trait Agent {
-    fn setup(&mut self, id: AgentId);
+    fn setup(&mut self, id: AgentId, info: &MarketInfo);
 
-    fn produce_orders(&mut self, history: &History) -> Vec<(OrderSide, Amount, i64)>;
+    fn produce_orders(&mut self, info: &MarketInfo, history: &History) -> Vec<OrderData>;
 }

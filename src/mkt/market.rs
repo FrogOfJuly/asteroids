@@ -29,6 +29,7 @@ impl Account {
 
 #[derive(Default, Debug)]
 pub struct History {
+    pub step: RefCell<u64>,
     pub transactions: Vec<Transaction>,
     pub rejected_orders: Vec<Order>,
     pub unfulfilled_orders: Vec<Order>,
@@ -50,6 +51,10 @@ impl History {
             })
         }
     }
+
+    pub fn inc_step(&self) {
+        *self.step.borrow_mut() += 1;
+    }
 }
 
 impl Display for History {
@@ -62,14 +67,19 @@ impl Display for History {
     }
 }
 
-#[derive(Default)]
+pub struct MarketInfo {
+    pub name: String,
+    // commodity : CommodityType,
+}
+
 pub struct Market {
     pub book: OrderBook,
     pub history: History,
+    pub info: MarketInfo,
 
     id: RefCell<u64>,
 
-    market_account : Account,
+    market_account: Account,
 
     accounts: HashMap<AgentId, Account>,
     agents: HashMap<AgentId, RefCell<Box<dyn Agent>>>,
@@ -77,10 +87,23 @@ pub struct Market {
 }
 
 impl Market {
+    pub fn new(info: MarketInfo) -> Market {
+        Self {
+            book: Default::default(),
+            history: Default::default(),
+            info,
+            id: Default::default(),
+            market_account: Default::default(),
+            accounts: Default::default(),
+            agents: Default::default(),
+            order_map: Default::default(),
+        }
+    }
+
     pub fn register_agent(&mut self, mut agent: Box<dyn Agent>) -> AgentId {
         let id = AgentId::new(*self.id.borrow());
         *self.id.borrow_mut() += 1;
-        agent.setup(id);
+        agent.setup(id, &self.info);
         self.accounts.insert(id, Account::starting_account());
         self.agents.insert(id, RefCell::new(agent));
         id
@@ -95,7 +118,7 @@ impl Market {
         self.accounts.get(&agent_id).cloned()
     }
 
-    pub fn step(&mut self) {
+    pub fn step(&mut self) -> usize {
         self.order_map.clear();
         self.clear_reserves();
 
@@ -120,6 +143,9 @@ impl Market {
 
         self.history.transactions = [market_transactions, limit_transactions].concat();
         self.history.unfulfilled_orders = self.book.all_orders();
+        self.history.inc_step();
+
+        self.history.transactions.len()
     }
 }
 
@@ -199,9 +225,9 @@ impl Market {
         agents.iter().for_each(|(agent_id, agent_ref)| {
             let orders: Vec<_> = agent_ref
                 .borrow_mut()
-                .produce_orders(&self.history)
+                .produce_orders(&self.info, &self.history)
                 .into_iter()
-                .map(|(side, price, size)| self.book.new_order_raw(side, Some(price), size, false))
+                .flat_map(|data| self.book.new_order_checked(data))
                 .collect();
 
             orders.iter().for_each(|&order| {

@@ -21,7 +21,7 @@ pub struct OrderBook {
 }
 
 impl OrderBook {
-    pub fn new_order_checked(&self, data: OrderData, inc_time: bool) -> Option<Order> {
+    pub fn new_order_checked(&self, data: OrderData) -> Option<Order> {
         if data.price.is_some_and(|x| x.as_int <= 0) {
             return None;
         }
@@ -30,28 +30,18 @@ impl OrderBook {
             return None;
         }
 
-        Some(self.new_order(data, inc_time))
+        Some(self.new_order(data))
     }
 
-    pub fn new_order(&self, data: OrderData, inc_time: bool) -> Order {
-        self.new_order_raw(data.side, data.price, data.size, inc_time)
+    pub fn new_order(&self, data: OrderData) -> Order {
+        self.new_order_raw(data.side, data.price, data.size)
     }
 
-    pub fn new_order_raw(
-        &self,
-        side: OrderSide,
-        price: Option<Amount>,
-        size: i64,
-        inc_time: bool,
-    ) -> Order {
+    pub fn new_order_raw(&self, side: OrderSide, price: Option<Amount>, size: i64) -> Order {
         let id = *self.id.borrow();
         *self.id.borrow_mut() += 1;
 
         let timestamp = *self.time.borrow();
-
-        if inc_time {
-            *self.time.borrow_mut() += 1;
-        }
 
         Order {
             timestamp,
@@ -362,7 +352,7 @@ mod prop_tests {
                 price: Some(price),
                 size: size as i64,
             })
-            .flat_map(|data| ob.new_order_checked(data, false))
+            .flat_map(|data| ob.new_order_checked(data))
             .collect();
 
         orders.into_iter().for_each(|order| ob.add_order(order));
@@ -399,7 +389,7 @@ mod prop_tests {
                 price: Some(*price),
                 size: size.as_int,
             })
-            .flat_map(|data| ob.new_order_checked(data, false))
+            .flat_map(|data| ob.new_order_checked(data))
             .collect();
 
         // println!("adding orders..");
@@ -415,13 +405,11 @@ mod prop_tests {
 
         // println!("creating market orders..");
 
-        let Some(market_ask) =
-            ob.new_order_checked(format!("A:{bid_amount}").try_into().unwrap(), false)
+        let Some(market_ask) = ob.new_order_checked(format!("A:{bid_amount}").try_into().unwrap())
         else {
             return true;
         };
-        let Some(market_bid) =
-            ob.new_order_checked(format!("B:{ask_amount}").try_into().unwrap(), false)
+        let Some(market_bid) = ob.new_order_checked(format!("B:{ask_amount}").try_into().unwrap())
         else {
             return true;
         };
@@ -455,18 +443,18 @@ mod limit_tests {
     fn match_1v1_exact() {
         let mut ob = OrderBook::default();
 
-        [
-            (OrderSide::Ask, Amount { as_int: 1 }, 1),
-            (OrderSide::Bid, Amount { as_int: 1 }, 1),
-        ]
-        .map(|(side, price, size)| ob.new_order_raw(side, Some(price), size, false))
-        .into_iter()
-        .for_each(|order| ob.add_order(order));
+        let orders: Vec<_> = ["A:1:1", "B:1:1"]
+            .into_iter()
+            .flat_map(TryInto::<OrderData>::try_into)
+            .flat_map(|data| ob.new_order_checked(data))
+            .collect();
+
+        orders.into_iter().for_each(|order| ob.add_order(order));
 
         let transactions = ob.match_all_limit();
 
-        assert_eq!(ob.limit_asks.len(), 0);
-        assert_eq!(ob.limit_bids.len(), 0);
+        assert!(ob.limit_asks.is_empty());
+        assert!(ob.limit_bids.is_empty());
         assert_eq!(transactions.len(), 1);
         assert_eq!(
             transactions.first(),
@@ -489,7 +477,7 @@ mod limit_tests {
             (OrderSide::Ask, Amount { as_int: 2 }, 1),
             (OrderSide::Bid, Amount { as_int: 1 }, 1),
         ]
-        .map(|(side, price, size)| ob.new_order_raw(side, Some(price), size, false))
+        .map(|(side, price, size)| ob.new_order_raw(side, Some(price), size))
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
@@ -508,7 +496,7 @@ mod limit_tests {
             (OrderSide::Ask, Amount { as_int: 1 }, 1),
             (OrderSide::Bid, Amount { as_int: 2 }, 1),
         ]
-        .map(|(side, price, size)| ob.new_order_raw(side, Some(price), size, false))
+        .map(|(side, price, size)| ob.new_order_raw(side, Some(price), size))
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
@@ -539,7 +527,7 @@ mod limit_tests {
             (OrderSide::Ask, Amount { as_int: 1 }, 1),
             (OrderSide::Bid, Amount { as_int: 1 }, 2),
         ]
-        .map(|(side, price, size)| ob.new_order_raw(side, Some(price), size, true))
+        .map(|(side, price, size)| ob.new_order_raw(side, Some(price), size))
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
@@ -583,7 +571,7 @@ mod limit_tests {
             (OrderSide::Bid, Amount { as_int: 1 }, 1),
             (OrderSide::Bid, Amount { as_int: 1 }, 1),
         ]
-        .map(|(side, price, size)| ob.new_order_raw(side, Some(price), size, true))
+        .map(|(side, price, size)| ob.new_order_raw(side, Some(price), size))
         .into_iter()
         .for_each(|order| ob.add_order(order));
 
