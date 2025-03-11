@@ -22,7 +22,7 @@ pub trait Agent {
     fn produce_orders(
         &mut self,
         account: &Account,
-        info: &MarketInfo<Self::CommodityType>,
+        info: &Self::MarketInfoType,
         history: &History,
     ) -> Vec<OrderData>;
 }
