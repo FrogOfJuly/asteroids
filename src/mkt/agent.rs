@@ -1,4 +1,7 @@
-use super::market::{Account, History, MarketInfo};
+use super::{
+    account::Account,
+    market::{History, MarketInfo},
+};
 use crate::ob::orders::flat::OrderData;
 
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]

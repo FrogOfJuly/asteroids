@@ -1,4 +1,4 @@
-use mkt::{agent::*, market::*};
+use mkt::{account::Account, agent::*, market::*};
 use ob::orders::flat::OrderData;
 
 pub mod mkt;
