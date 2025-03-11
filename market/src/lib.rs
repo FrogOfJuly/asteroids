@@ -55,12 +55,14 @@ mod simulation_test {
             name: "test".to_owned(),
             commodity: CommodityType::Unit,
         });
-        market.register_agent(Box::new(ConsumerAgent {}));
-        market.register_agent(Box::new(ProducerAgent {}));
+        market.register_with_starting_acc(Box::new(ConsumerAgent {}));
+        market.register_with_starting_acc(Box::new(ProducerAgent {}));
 
         while market.step() > 0 {
-            println!("{:?}", market.history.market_price());
+            println!("{:?}", market.history);
             market.history.inc_step();
         }
+
+        println!("{}", market.history);
     }
 }

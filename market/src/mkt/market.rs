@@ -13,7 +13,7 @@ use super::{
 
 #[derive(Default, Debug)]
 pub struct History {
-    pub step: RefCell<u64>,
+    pub(crate) step: RefCell<u64>,
     pub transactions: Vec<Transaction>,
     pub rejected_orders: Vec<Order>,
     pub unfulfilled_orders: Vec<Order>,
@@ -36,8 +36,18 @@ impl History {
         }
     }
 
-    pub fn inc_step(&self) {
+    pub fn clear(&mut self) {
+        self.transactions = Default::default();
+        self.rejected_orders = Default::default();
+        self.unfulfilled_orders = Default::default();
+    }
+
+    pub fn inc_step(&mut self) {
         *self.step.borrow_mut() += 1;
+    }
+
+    pub fn cur_step(&self) -> u64 {
+        *self.step.borrow()
     }
 }
 
@@ -69,7 +79,7 @@ pub struct Market<CommodityType> {
 
     market_account: Account,
 
-    accounts: HashMap<AgentId, Account>,
+    pub accounts: HashMap<AgentId, Account>,
     agents: HashMap<AgentId, AgentRefType<CommodityType>>,
     order_map: HashMap<u64, AgentId>,
 }
@@ -88,13 +98,25 @@ impl<CommodityType> Market<CommodityType> {
         }
     }
 
-    pub fn register_agent(&mut self, mut agent: AgentType<CommodityType>) -> AgentId {
+    pub fn register_with_acc(
+        &mut self,
+        mut agent: AgentType<CommodityType>,
+        account: Account,
+    ) -> AgentId {
         let id = AgentId::new(*self.id.borrow());
         *self.id.borrow_mut() += 1;
         agent.setup(id, &self.info);
-        self.accounts.insert(id, Account::starting_account());
+        self.accounts.insert(id, account);
         self.agents.insert(id, RefCell::new(agent));
         id
+    }
+
+    pub fn register_with_starting_acc(&mut self, agent: AgentType<CommodityType>) -> AgentId {
+        self.register_with_acc(agent, Account::starting_account())
+    }
+
+    pub fn register_with_default_acc(&mut self, agent: AgentType<CommodityType>) -> AgentId {
+        self.register_with_acc(agent, Account::default())
     }
 
     pub fn owner(&self, order: &LimitOrder) -> Option<AgentId> {
@@ -106,11 +128,13 @@ impl<CommodityType> Market<CommodityType> {
         self.accounts.get(&agent_id).cloned()
     }
 
-    pub fn step(&mut self) -> usize {
-        //cleanup
+    pub fn clear_orders(&mut self) {
         self.order_map.clear();
         self.clear_reservations();
+        self.book.clear_orders();
+    }
 
+    pub fn step(&mut self) -> usize {
         //process agent actions and reject unfulfillable orders
         let rejected_orders = self.process_agent_actions();
 
@@ -118,7 +142,7 @@ impl<CommodityType> Market<CommodityType> {
         let prev_market_price = self.history.market_price();
 
         //reset history
-        self.history = History::default();
+        self.history.clear();
 
         self.history.rejected_orders = rejected_orders;
 
