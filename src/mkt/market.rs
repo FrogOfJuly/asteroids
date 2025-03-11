@@ -104,21 +104,46 @@ impl Market {
     }
 
     pub fn step(&mut self) -> usize {
+        //cleanup
         self.order_map.clear();
         self.clear_reservations();
 
+        //process agent actions and reject unfulfillable orders
         let rejected_orders = self.process_agent_actions();
 
-        let market_price = self.history.market_price();
+        // market price from previous step
+        let prev_market_price = self.history.market_price();
+
+        //reset history
         self.history = History::default();
 
         self.history.rejected_orders = rejected_orders;
 
-        let market_transactions = self.book.match_all_market(market_price);
+        //do market transactions with limit transactions
+        let market_transactions = self.book.match_all_market(None);
 
         market_transactions
             .iter()
             .for_each(|trns| self.fulfill_transaction(trns));
+
+        //remember all the transactions
+        self.history.transactions = market_transactions;
+
+        // determine new market price
+        let market_price = self.history.market_price();
+
+        //if there are market transactions left, match and fullfil them with either
+        // * current market price
+        // * previous market price
+        let secondary_market_transactions = self
+            .book
+            .match_all_market(market_price.or(prev_market_price));
+
+        secondary_market_transactions
+            .iter()
+            .for_each(|trns| self.fulfill_transaction(trns));
+
+        //if there are limit transactions left, match and fullfil as much as possible
 
         let limit_transactions = self.book.match_all_limit();
 
@@ -126,10 +151,23 @@ impl Market {
             .iter()
             .for_each(|trns| self.fulfill_transaction(trns));
 
-        self.history.transactions = [market_transactions, limit_transactions].concat();
-        self.history.unfulfilled_orders = self.book.all_orders();
-        self.history.inc_step();
+        let mut primary_market_transactions = vec![];
+        std::mem::swap(
+            &mut primary_market_transactions,
+            &mut self.history.transactions,
+        );
 
+        // record all the history for next step
+
+        self.history.transactions = [
+            primary_market_transactions,
+            secondary_market_transactions,
+            limit_transactions,
+        ]
+        .concat();
+        
+        //all the remaining orders are unfulfilled
+        self.history.unfulfilled_orders = self.book.all_orders();
         self.history.transactions.len()
     }
 }

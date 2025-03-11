@@ -47,5 +47,6 @@ fn main() {
 
     while market.step() > 0 {
         println!("{:?}", market.history.market_price());
+        market.history.inc_step();
     }
 }
