@@ -14,12 +14,15 @@ impl AgentId {
 }
 
 pub trait Agent {
-    fn setup(&mut self, id: AgentId, info: &MarketInfo);
+    type CommodityType;
+    type MarketInfoType = MarketInfo<Self::CommodityType>;
+
+    fn setup(&mut self, id: AgentId, info: &Self::MarketInfoType);
 
     fn produce_orders(
         &mut self,
         account: &Account,
-        info: &MarketInfo,
+        info: &MarketInfo<Self::CommodityType>,
         history: &History,
     ) -> Vec<OrderData>;
 }

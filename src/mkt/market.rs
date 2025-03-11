@@ -51,14 +51,17 @@ impl Display for History {
     }
 }
 
-pub struct MarketInfo {
+type AgentType<T> = Box<dyn Agent<CommodityType = T, MarketInfoType = MarketInfo<T>>>;
+type AgentRefType<T> = RefCell<AgentType<T>>;
+
+pub struct MarketInfo<CommodityType> {
     pub name: String,
-    // commodity : CommodityType,
+    pub commodity: CommodityType,
 }
 
-pub struct Market {
+pub struct Market<CommodityType> {
     pub history: History,
-    pub info: MarketInfo,
+    pub info: MarketInfo<CommodityType>,
 
     book: OrderBook,
 
@@ -67,12 +70,12 @@ pub struct Market {
     market_account: Account,
 
     accounts: HashMap<AgentId, Account>,
-    agents: HashMap<AgentId, RefCell<Box<dyn Agent>>>,
+    agents: HashMap<AgentId, AgentRefType<CommodityType>>,
     order_map: HashMap<u64, AgentId>,
 }
 
-impl Market {
-    pub fn new(info: MarketInfo) -> Market {
+impl<CommodityType> Market<CommodityType> {
+    pub fn new(info: MarketInfo<CommodityType>) -> Market<CommodityType> {
         Self {
             book: Default::default(),
             history: Default::default(),
@@ -85,7 +88,7 @@ impl Market {
         }
     }
 
-    pub fn register_agent(&mut self, mut agent: Box<dyn Agent>) -> AgentId {
+    pub fn register_agent(&mut self, mut agent: AgentType<CommodityType>) -> AgentId {
         let id = AgentId::new(*self.id.borrow());
         *self.id.borrow_mut() += 1;
         agent.setup(id, &self.info);
@@ -165,14 +168,14 @@ impl Market {
             limit_transactions,
         ]
         .concat();
-        
+
         //all the remaining orders are unfulfilled
         self.history.unfulfilled_orders = self.book.all_orders();
         self.history.transactions.len()
     }
 }
 
-impl Market {
+impl<CommodityType> Market<CommodityType> {
     fn clear_reservations(&mut self) {
         self.accounts.iter_mut().for_each(|(_, acc_mut)| {
             acc_mut.reserved_commodity = Default::default();
@@ -182,7 +185,7 @@ impl Market {
 
     fn process_agent_actions(&mut self) -> Vec<Order> {
         let mut rejected_orders: Vec<Order> = Vec::new();
-        let mut agents: HashMap<AgentId, RefCell<Box<dyn Agent>>> = Default::default();
+        let mut agents: HashMap<AgentId, AgentRefType<CommodityType>> = Default::default();
 
         std::mem::swap(&mut self.agents, &mut agents);
 
