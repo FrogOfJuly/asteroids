@@ -33,6 +33,7 @@ jobs:
         run: |
           cd render
           wasm-pack build --out-dir www/pkg
+          rm web/pkg/.gitignore
           cd -
 
       - name: peek
