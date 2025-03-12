@@ -217,15 +217,15 @@ function __wbg_adapter_26(arg0, arg1) {
 }
 
 function __wbg_adapter_29(arg0, arg1, arg2) {
-    wasm.closure58_externref_shim(arg0, arg1, arg2);
+    wasm.closure60_externref_shim(arg0, arg1, arg2);
 }
 
 function __wbg_adapter_32(arg0, arg1, arg2) {
-    wasm.closure136_externref_shim(arg0, arg1, arg2);
+    wasm.closure138_externref_shim(arg0, arg1, arg2);
 }
 
 function __wbg_adapter_93(arg0, arg1, arg2, arg3) {
-    wasm.closure169_externref_shim(arg0, arg1, arg2, arg3);
+    wasm.closure171_externref_shim(arg0, arg1, arg2, arg3);
 }
 
 const ColorFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -561,18 +561,18 @@ export function __wbindgen_cb_drop(arg0) {
     return ret;
 };
 
-export function __wbindgen_closure_wrapper161(arg0, arg1, arg2) {
-    const ret = makeMutClosure(arg0, arg1, 59, __wbg_adapter_26);
+export function __wbindgen_closure_wrapper170(arg0, arg1, arg2) {
+    const ret = makeMutClosure(arg0, arg1, 61, __wbg_adapter_26);
     return ret;
 };
 
-export function __wbindgen_closure_wrapper162(arg0, arg1, arg2) {
-    const ret = makeMutClosure(arg0, arg1, 59, __wbg_adapter_29);
+export function __wbindgen_closure_wrapper171(arg0, arg1, arg2) {
+    const ret = makeMutClosure(arg0, arg1, 61, __wbg_adapter_29);
     return ret;
 };
 
-export function __wbindgen_closure_wrapper347(arg0, arg1, arg2) {
-    const ret = makeMutClosure(arg0, arg1, 137, __wbg_adapter_32);
+export function __wbindgen_closure_wrapper354(arg0, arg1, arg2) {
+    const ret = makeMutClosure(arg0, arg1, 139, __wbg_adapter_32);
     return ret;
 };
 
