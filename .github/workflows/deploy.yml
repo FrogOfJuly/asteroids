@@ -21,8 +21,8 @@ jobs:
       - name: run .travis.yml
         uses: ktomk/run-travis-yml@v1.8.1
 
-      - name: Remove gitignore
-        run: rm web/pkg/.gitignore
+      # - name: Remove gitignore
+      #   run: rm web/pkg/.gitignore
 
       - name: Peek
         run: tree -L 3
