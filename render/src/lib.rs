@@ -23,7 +23,7 @@ extern "C" {
 
 #[wasm_bindgen]
 pub struct Cursive {
-    backend: Mutex<cursive::Cursive>,
+    _backend: Mutex<cursive::Cursive>,
 }
 
 pub struct Asteroids {}
@@ -41,7 +41,9 @@ impl Default for Asteroids {
 }
 
 impl View for Asteroids {
-    fn draw(&self, printer: &cursive::Printer) {}
+    fn draw(&self, printer: &cursive::Printer) {
+        printer.theme(&cursive::theme::Theme::retro());
+    }
 }
 
 #[wasm_bindgen]
@@ -51,13 +53,13 @@ impl Cursive {
         set_panic_hook();
         alert("Hello!");
         let mut siv: cursive::Cursive = cursive::Cursive::new();
-        let tetris = Asteroids::new(); //.with_name("asteroids");
-        siv.add_layer(tetris);
+        let asteroids = Asteroids::new(); //.with_name("asteroids");
+        siv.add_layer(asteroids);
         siv.focus(&Selector::Name("asteroids")).unwrap();
         siv.set_fps(1000);
         let siv: Mutex<cursive::Cursive> = std::sync::Mutex::new(siv);
         siv.lock().unwrap().run_with(|| backend::backend()).await;
-        Cursive { backend: siv }
+        Cursive { _backend: siv }
     }
 
     #[wasm_bindgen(js_name = "asteroids_with_canvas")]
@@ -65,8 +67,8 @@ impl Cursive {
         set_panic_hook();
         alert("Hello!");
         let mut siv: cursive::Cursive = cursive::Cursive::new();
-        let tetris = Asteroids::new(); //.with_name("asteroids");
-        siv.add_layer(tetris);
+        let asteroids = Asteroids::new(); //.with_name("asteroids");
+        siv.add_layer(asteroids);
         siv.focus(&Selector::Name("asteroids")).unwrap();
         siv.set_fps(1000);
         let siv: Mutex<cursive::Cursive> = std::sync::Mutex::new(siv);
@@ -74,6 +76,6 @@ impl Cursive {
             .unwrap()
             .run_with(|| backend::backend_with_canvas(canvas))
             .await;
-        Cursive { backend: siv }
+        Cursive { _backend: siv }
     }
 }
