@@ -23,7 +23,7 @@ matrix:
       # in any of our parent dirs is problematic.
       # - mv Cargo.toml Cargo.toml.tmpl
       - cd render
-      - wasm-pack build render
+      - wasm-pack build --out-dir www/pkg
       - wasm-pack test --chrome --firefox --headless
 
   # Builds on nightly.
@@ -56,8 +56,8 @@ matrix:
       - cargo install-update -a
       - rustup target add wasm32-unknown-unknown
     script:
-      - cargo generate --git . --name testing
-      - mv Cargo.toml Cargo.toml.tmpl
+      # - cargo generate --git . --name testing
+      # - mv Cargo.toml Cargo.toml.tmpl
       - cd render
       - cargo check
       - cargo check --target wasm32-unknown-unknown
