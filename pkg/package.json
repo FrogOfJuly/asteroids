@@ -1,0 +1,17 @@
+{
+  "name": "render",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "render_bg.wasm",
+    "render.js",
+    "render_bg.js",
+    "render.d.ts"
+  ],
+  "main": "render.js",
+  "types": "render.d.ts",
+  "sideEffects": [
+    "./render.js",
+    "./snippets/*"
+  ]
+}
