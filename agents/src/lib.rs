@@ -92,3 +92,29 @@ impl<T> Agent for BuyAgent<T> {
         ]
     }
 }
+
+pub struct IncBuyAgent<T> {
+    pub ask_size: i64,
+    pub ask_amount: i64,
+    pub period: u64,
+    pub price: Amount,
+    pub _ph: std::marker::PhantomData<T>,
+}
+
+impl<T> Agent for IncBuyAgent<T> {
+    type CommodityType = T;
+
+    fn setup(&mut self, id: market::mkt::agent::AgentId, info: &Self::MarketInfoType) {
+        todo!()
+    }
+
+    fn produce_orders(
+        &mut self,
+        account: &market::mkt::account::Account,
+        info: &Self::MarketInfoType,
+        history: &market::mkt::market::History,
+    ) -> Vec<OrderData> {
+        // permit checks about your orders
+        todo!()
+    }
+}
