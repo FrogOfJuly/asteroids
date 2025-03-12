@@ -104,15 +104,15 @@ pub struct IncBuyAgent<T> {
 impl<T> Agent for IncBuyAgent<T> {
     type CommodityType = T;
 
-    fn setup(&mut self, id: market::mkt::agent::AgentId, info: &Self::MarketInfoType) {
+    fn setup(&mut self, _id: market::mkt::agent::AgentId, _info: &Self::MarketInfoType) {
         todo!()
     }
 
     fn produce_orders(
         &mut self,
-        account: &market::mkt::account::Account,
-        info: &Self::MarketInfoType,
-        history: &market::mkt::market::History,
+        _account: &market::mkt::account::Account,
+        _info: &Self::MarketInfoType,
+        _history: &market::mkt::market::History,
     ) -> Vec<OrderData> {
         // permit checks about your orders
         todo!()
