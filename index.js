@@ -1,4 +1,4 @@
-import { Cursive } from "asteroids";
+import { Cursive } from "render";
 
 const canvas = document.getElementById("cursive-wasm-canvas");
 canvas.style.display = "block";
