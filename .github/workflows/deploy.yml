@@ -32,8 +32,8 @@ jobs:
       - name: build
         run: |
           cd render
-          wasm-pack build --out-dir www/pkg
-          rm www/pkg/.gitignore
+          wasm-pack build --release --target web --out-name web --out-dir web/pkg
+          rm web/pkg/.gitignore
           cd -
 
       - name: peek
@@ -44,4 +44,4 @@ jobs:
         if: github.ref == 'refs/heads/main'
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./render/www
+          publish_dir: ./render/web
