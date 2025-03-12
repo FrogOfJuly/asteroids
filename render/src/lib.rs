@@ -1,4 +1,4 @@
-use cursive::{View, view::Selector};
+use cursive::View;
 use std::sync::Mutex;
 use wasm_bindgen::prelude::wasm_bindgen;
 use web_sys::HtmlCanvasElement;
