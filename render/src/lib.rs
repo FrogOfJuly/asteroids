@@ -43,6 +43,13 @@ impl Default for Asteroids {
 impl View for Asteroids {
     fn draw(&self, printer: &cursive::Printer) {
         printer.theme(&cursive::theme::Theme::retro());
+        let width = 100;
+        let height = 100;
+        for j in 0..height {
+            for i in 0..width {
+                printer.print((2 * i, j), "?");
+            }
+        }
     }
 }
 
@@ -55,7 +62,7 @@ impl Cursive {
         let mut siv: cursive::Cursive = cursive::Cursive::new();
         let asteroids = Asteroids::new(); //.with_name("asteroids");
         siv.add_layer(asteroids);
-        siv.focus(&Selector::Name("asteroids")).unwrap();
+        // siv.focus(&Selector::Name("asteroids")).unwrap();
         siv.set_fps(1000);
         let siv: Mutex<cursive::Cursive> = std::sync::Mutex::new(siv);
         siv.lock().unwrap().run_with(|| backend::backend()).await;
@@ -69,7 +76,7 @@ impl Cursive {
         let mut siv: cursive::Cursive = cursive::Cursive::new();
         let asteroids = Asteroids::new(); //.with_name("asteroids");
         siv.add_layer(asteroids);
-        siv.focus(&Selector::Name("asteroids")).unwrap();
+        // siv.focus(&Selector::Name("asteroids")).unwrap();
         siv.set_fps(1000);
         let siv: Mutex<cursive::Cursive> = std::sync::Mutex::new(siv);
         siv.lock()
