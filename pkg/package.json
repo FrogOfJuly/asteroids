@@ -3,15 +3,13 @@
   "type": "module",
   "version": "0.1.0",
   "files": [
-    "render_bg.wasm",
-    "render.js",
-    "render_bg.js",
-    "render.d.ts"
+    "web_bg.wasm",
+    "web.js",
+    "web.d.ts"
   ],
-  "main": "render.js",
-  "types": "render.d.ts",
+  "main": "web.js",
+  "types": "web.d.ts",
   "sideEffects": [
-    "./render.js",
     "./snippets/*"
   ]
 }
