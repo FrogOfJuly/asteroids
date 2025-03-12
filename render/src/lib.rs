@@ -49,7 +49,7 @@ impl View for Asteroids {
 #[wasm_bindgen]
 impl Cursive {
     #[wasm_bindgen(js_name = "asteroids")]
-    pub async fn retris() -> Cursive {
+    pub async fn asteroids() -> Cursive {
         set_panic_hook();
         alert("Hello!");
         let mut siv: cursive::Cursive = cursive::Cursive::new();
@@ -63,7 +63,7 @@ impl Cursive {
     }
 
     #[wasm_bindgen(js_name = "asteroids_with_canvas")]
-    pub async fn retris_with_canvas(canvas: HtmlCanvasElement) -> Cursive {
+    pub async fn asteroids_with_canvas(canvas: HtmlCanvasElement) -> Cursive {
         set_panic_hook();
         alert("Hello!");
         let mut siv: cursive::Cursive = cursive::Cursive::new();
