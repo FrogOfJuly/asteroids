@@ -1,0 +1,35 @@
+name: Continuous deployment
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - master
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: run .travis.yml
+        uses: ktomk/run-travis-yml@v1.8.1
+
+      - name: Remove gitignore
+        run: rm web/pkg/.gitignore
+
+      - name: Peek
+        run: tree -L 3
+
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        if: github.ref == 'refs/heads/master'
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./render/www
