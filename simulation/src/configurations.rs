@@ -8,7 +8,7 @@ use market::{
     market::{History, Market, MarketInfo},
 };
 
-enum CommodityType {
+pub enum CommodityType {
     Unit,
 }
 
@@ -18,12 +18,12 @@ trait Agent =
 type AgentRefType = RefCell<Box<dyn Agent>>;
 
 pub struct MarketConfiguration {
-    market: Market<CommodityType>,
-    agents: Vec<(AgentId, AgentRefType)>,
+    pub market: Market<CommodityType>,
+    pub agents: Vec<(AgentId, AgentRefType)>,
 
-    history: History,
-    market_price: Option<Amount>,
-    step: u64,
+    pub history: History,
+    pub market_price: Option<Amount>,
+    pub step: u64,
 }
 
 impl MarketConfiguration {
@@ -42,7 +42,7 @@ impl MarketConfiguration {
                 _ph: std::marker::PhantomData,
             })
             .map(Box::new)
-            .take(10)
+            .take(3)
             .map(|x| {
                 let y: Box<dyn Agent> = x;
                 y
@@ -58,7 +58,7 @@ impl MarketConfiguration {
                 _ph: std::marker::PhantomData,
             })
             .map(Box::new)
-            .take(10)
+            .take(3)
             .map(|x| {
                 let y: Box<dyn Agent> = x;
                 y
@@ -146,12 +146,6 @@ impl MarketConfiguration {
         if !self.history.no_transactions() {
             self.market_price = self.history.market_price()
         }
-
-        println!(
-            "market price: {}",
-            self.market_price
-                .map_or("?".to_owned(), |x| x.as_int.to_string())
-        );
 
         self.market.clear_reserves_and_orders();
         self.step += 1;

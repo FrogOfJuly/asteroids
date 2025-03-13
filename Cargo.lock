@@ -906,6 +906,7 @@ dependencies = [
  "log",
  "market",
  "serde",
+ "simulation",
  "wasm-bindgen-futures",
  "web-sys",
 ]

@@ -6,7 +6,7 @@ use super::{
         market::{AskMarketOrder, BidMarketOrder, MarketOrder},
     },
 };
-use std::{cell::RefCell, cmp::Ordering, collections::BinaryHeap};
+use std::{cell::RefCell, cmp::Ordering, collections::BinaryHeap, fmt::Debug};
 
 #[derive(Clone, Debug, Default)]
 pub struct OrderBook {
@@ -85,7 +85,7 @@ impl OrderBook {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Transaction {
     pub bid_id: u64,
     pub ask_id: u64,
@@ -93,6 +93,16 @@ pub struct Transaction {
     pub bid_loss: Amount,
     pub ask_gain: Amount,
     pub diff: Amount,
+}
+
+impl Debug for Transaction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}:{}-{}-{}:{}",
+            self.bid_id, self.bid_loss.as_int, self.size, self.ask_gain.as_int, self.ask_id
+        )
+    }
 }
 
 impl OrderBook {

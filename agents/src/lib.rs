@@ -135,12 +135,13 @@ impl<T> Agent for IncBuyAgent<T> {
             .map(|(_, o)| o.size)
             .sum();
 
-        if missing_comm > 0 {
-            self.price = Amount {
-                as_int: (self.price.as_int - self.increment.as_int).max(0),
-            };
-        } else {
-            self.price += self.increment;
+        match missing_comm.cmp(&0) {
+            std::cmp::Ordering::Greater => {
+                self.price = Amount {
+                    as_int: (self.price.as_int + self.increment.as_int).max(0),
+                }
+            }
+            _ => self.price -= self.increment,
         }
 
         if self.price.as_int <= 0 {
@@ -218,12 +219,13 @@ impl<T> Agent for IncSellAgent<T> {
             .map(|(_, o)| o.size)
             .sum();
 
-        if missing_comm > 0 {
-            self.price = Amount {
-                as_int: (self.price.as_int - self.increment.as_int).max(0),
-            };
-        } else {
-            self.price += self.increment;
+        match missing_comm.cmp(&0) {
+            std::cmp::Ordering::Greater => {
+                self.price = Amount {
+                    as_int: (self.price.as_int - self.increment.as_int).max(0),
+                }
+            }
+            _ => self.price += self.increment,
         }
 
         if self.price.as_int <= 0 {

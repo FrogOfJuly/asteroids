@@ -15,12 +15,13 @@ eframe = { version = "0.30", default-features = false, features = [
     "wayland",       # To support Linux (and CI)
 ] }
 log = "0.4"
-market =  { path = "../market" }
-agents =  { path = "../agents" }
+market = { path = "../market" }
+simulation = { path = "../simulation" }
+agents = { path = "../agents" }
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
-egui_plot = { version = "0.30.0", features = ["serde"]}
+egui_plot = { version = "0.30.0", features = ["serde"] }
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
