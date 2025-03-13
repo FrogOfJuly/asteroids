@@ -6,12 +6,12 @@
 pub mod account;
 pub mod agent;
 pub mod amount;
-pub mod order_book;
 pub mod market;
+pub mod order_book;
 pub mod orders;
 
 #[cfg(test)]
-mod simulation_test {
+mod test_simulation {
     use std::cell::RefCell;
 
     use crate::{
@@ -75,7 +75,11 @@ mod simulation_test {
 
             [a1, a2]
                 .into_iter()
-                .map(|agent| (market.register_with_default_acc(), agent))
+                .map(|agent| {
+                    let id = market.register_with_default_acc();
+                    (*agent.borrow_mut()).setup(id, &market.info);
+                    (id, agent)
+                })
                 .collect()
         };
 
