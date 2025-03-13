@@ -5,11 +5,15 @@ use simulation::configurations::MarketConfiguration;
 #[derive(serde::Deserialize, serde::Serialize, Default)]
 #[serde(default)]
 pub struct AsteroidApp {
+    #[serde(skip)]
     pause: bool,
+    #[serde(skip)]
     time: f64,
-    last_sim_step: f64,
 
+    last_sim_step: f64,
     dt: f64,
+
+    #[serde(skip)]
     no_transactions: u64,
 
     #[serde(skip)]
@@ -20,18 +24,13 @@ pub struct AsteroidApp {
 }
 
 impl AsteroidApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         // This is also where you can customize the look and feel of egui using
         // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
 
-        if let Some(storage) = cc.storage {
-            eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default()
-        } else {
-            Self {
-                dt: 0.1,
-                pause: false,
-                ..Default::default()
-            }
+        Self {
+            dt: 0.1,
+            ..Default::default()
         }
     }
 }
@@ -79,27 +78,17 @@ impl eframe::App for AsteroidApp {
                 .show_axes(true)
                 .show_grid(true);
 
-            println!("{}, {}, {}", self.pause, self.no_transactions, self.time);
-
             if !self.pause {
                 ui.ctx().request_repaint();
                 let dt = ui.input(|i| i.unstable_dt).at_most(1.0 / 30.0) as f64;
                 self.time += dt;
             }
 
-            // if self.no_transactions > 10 {
-            //     self.pause = true;
-            // }
-
-            if !self.pause {
-                println!(
-                    "history: {:?}",
-                    self.market_configuration.history.transactions
-                );
+            if self.no_transactions > 10 {
+                self.pause = true;
             }
 
             if self.last_sim_step + self.dt < self.time {
-                println!("update");
                 let price = self
                     .market_configuration
                     .step()
@@ -110,6 +99,11 @@ impl eframe::App for AsteroidApp {
                 if self.market_configuration.history.no_transactions() {
                     self.no_transactions += 1;
                 }
+
+                println!(
+                    "history: {:?}",
+                    self.market_configuration.history.transactions
+                );
             }
 
             plot.show(ui, |plot_ui| {
