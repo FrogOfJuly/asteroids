@@ -1,9 +1,12 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Display};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, iter::repeat};
 
-use crate::ob::{
+use crate::{
     amount::Amount,
     book::{OrderBook, Transaction},
-    orders::{flat::Order, limit::LimitOrder},
+    orders::{
+        flat::{Order, OrderData},
+        limit::LimitOrder,
+    },
 };
 
 use super::{
@@ -13,7 +16,7 @@ use super::{
 
 #[derive(Default, Debug)]
 pub struct History {
-    pub(crate) step: RefCell<u64>,
+    pub step: u64,
     pub transactions: Vec<Transaction>,
     pub rejected_orders: Vec<Order>,
     pub unfulfilled_orders: Vec<Order>,
@@ -41,14 +44,6 @@ impl History {
         self.rejected_orders = Default::default();
         self.unfulfilled_orders = Default::default();
     }
-
-    pub fn inc_step(&mut self) {
-        *self.step.borrow_mut() += 1;
-    }
-
-    pub fn cur_step(&self) -> u64 {
-        *self.step.borrow()
-    }
 }
 
 impl Display for History {
@@ -70,7 +65,6 @@ pub struct MarketInfo<CommodityType> {
 }
 
 pub struct Market<CommodityType> {
-    pub history: History,
     pub info: MarketInfo<CommodityType>,
 
     book: OrderBook,
@@ -80,43 +74,73 @@ pub struct Market<CommodityType> {
     market_account: Account,
 
     pub accounts: HashMap<AgentId, Account>,
-    agents: HashMap<AgentId, AgentRefType<CommodityType>>,
     order_map: HashMap<u64, AgentId>,
 }
 
 impl<CommodityType> Market<CommodityType> {
+    pub type AgentRefType = AgentRefType<CommodityType>;
+    pub type AgentType = AgentRefType<CommodityType>;
+
     pub fn new(info: MarketInfo<CommodityType>) -> Market<CommodityType> {
         Self {
             book: Default::default(),
-            history: Default::default(),
             info,
             id: Default::default(),
             market_account: Default::default(),
             accounts: Default::default(),
-            agents: Default::default(),
             order_map: Default::default(),
         }
     }
 
-    pub fn register_with_acc(
-        &mut self,
-        mut agent: AgentType<CommodityType>,
-        account: Account,
-    ) -> AgentId {
+    pub fn all_orders(&self) -> Vec<Order> {
+        self.book.all_orders()
+    }
+
+    pub fn create_orders(
+        &self,
+        submitter: &AgentId,
+        submissions: &[OrderData],
+    ) -> Vec<Option<Order>> {
+        submissions
+            .iter()
+            .map(|data| {
+                self.accounts
+                    .get(submitter)
+                    .and(self.book.new_order_checked(*data))
+            })
+            .collect()
+    }
+
+    pub fn submit_order(&mut self, submitter: &AgentId, order: Order) -> Option<Order> {
+        let reserved = self
+            .accounts
+            .get_mut(submitter)
+            .unwrap()
+            .reserve_order(order);
+
+        if reserved {
+            let order_id = Into::<Order>::into(order).id;
+            self.order_map.insert(order_id, *submitter);
+            self.book.add_order(order);
+            None
+        } else {
+            Some(order)
+        }
+    }
+
+    pub fn register_with_acc(&mut self, account: Account) -> AgentId {
         let id = AgentId::new(*self.id.borrow());
         *self.id.borrow_mut() += 1;
-        agent.setup(id, &self.info);
         self.accounts.insert(id, account);
-        self.agents.insert(id, RefCell::new(agent));
         id
     }
 
-    pub fn register_with_starting_acc(&mut self, agent: AgentType<CommodityType>) -> AgentId {
-        self.register_with_acc(agent, Account::starting_account())
+    pub fn register_with_starting_acc(&mut self) -> AgentId {
+        self.register_with_acc(Account::starting_account())
     }
 
-    pub fn register_with_default_acc(&mut self, agent: AgentType<CommodityType>) -> AgentId {
-        self.register_with_acc(agent, Account::default())
+    pub fn register_with_default_acc(&mut self) -> AgentId {
+        self.register_with_acc(Account::default())
     }
 
     pub fn owner(&self, order: &LimitOrder) -> Option<AgentId> {
@@ -134,30 +158,54 @@ impl<CommodityType> Market<CommodityType> {
         self.book.clear_orders();
     }
 
-    pub fn step(&mut self) -> usize {
-        //process agent actions and reject unfulfillable orders
-        let rejected_orders = self.process_agent_actions();
+    pub fn agents_submit_orders(
+        &mut self,
+        agents: &[(AgentId, Self::AgentRefType)],
+        history: &History,
+    ) -> Vec<Order> {
+        let orders: Vec<(Option<Order>, AgentId)> = agents
+            .iter()
+            .filter_map(|(id, agent)| self.account(*id).map(|account| (id, agent, account)))
+            .flat_map(|(id, agent, account)| {
+                let data = (*agent.borrow_mut()).produce_orders(&account, &self.info, history);
 
-        // market price from previous step
-        let prev_market_price = self.history.market_price();
+                self.create_orders(id, data.as_slice())
+                    .into_iter()
+                    .zip(repeat(*id))
+            })
+            .collect();
 
-        //reset history
-        self.history.clear();
+        orders
+            .into_iter()
+            .flat_map(|(order, id)| order.map(|order| self.submit_order(&id, order)))
+            .flatten()
+            .collect()
+    }
 
-        self.history.rejected_orders = rejected_orders;
+    pub fn process_submitted_orders(
+        &mut self,
+        prev_market_price: Option<Amount>,
+    ) -> Vec<Transaction> {
+        // Assumes clean history
 
-        //do market transactions with limit transactions
-        let market_transactions = self.book.match_all_market(None);
+        let primary_market_transactions = self.book.match_all_market(None);
 
-        market_transactions
+        primary_market_transactions
             .iter()
             .for_each(|trns| self.fulfill_transaction(trns));
 
-        //remember all the transactions
-        self.history.transactions = market_transactions;
-
         // determine new market price
-        let market_price = self.history.market_price();
+        let market_price = if primary_market_transactions.is_empty() {
+            None
+        } else {
+            Some(
+                primary_market_transactions
+                    .iter()
+                    .map(|tr| (tr.ask_gain + tr.bid_loss).as_int / 2)
+                    .sum(),
+            )
+        }
+        .map(|as_int| Amount { as_int });
 
         //if there are market transactions left, match and fullfil them with either
         // * current market price
@@ -178,24 +226,14 @@ impl<CommodityType> Market<CommodityType> {
             .iter()
             .for_each(|trns| self.fulfill_transaction(trns));
 
-        let mut primary_market_transactions = vec![];
-        std::mem::swap(
-            &mut primary_market_transactions,
-            &mut self.history.transactions,
-        );
-
         // record all the history for next step
 
-        self.history.transactions = [
+        [
             primary_market_transactions,
             secondary_market_transactions,
             limit_transactions,
         ]
-        .concat();
-
-        //all the remaining orders are unfulfilled
-        self.history.unfulfilled_orders = self.book.all_orders();
-        self.history.transactions.len()
+        .concat()
     }
 }
 
@@ -205,46 +243,6 @@ impl<CommodityType> Market<CommodityType> {
             acc_mut.reserved_commodity = Default::default();
             acc_mut.reserved_money = Default::default();
         });
-    }
-
-    fn process_agent_actions(&mut self) -> Vec<Order> {
-        let mut rejected_orders: Vec<Order> = Vec::new();
-        let mut agents: HashMap<AgentId, AgentRefType<CommodityType>> = Default::default();
-
-        std::mem::swap(&mut self.agents, &mut agents);
-
-        agents.iter().for_each(|(&agent_id, agent_ref)| {
-            let Some(account_copy) = self.account(agent_id) else {
-                return;
-            };
-
-            let orders: Vec<_> = agent_ref
-                .borrow_mut()
-                .produce_orders(&account_copy, &self.info, &self.history)
-                .into_iter()
-                .flat_map(|data| self.book.new_order_checked(data))
-                .collect();
-
-            orders.into_iter().for_each(|order| {
-                let reserved = self
-                    .accounts
-                    .get_mut(&agent_id)
-                    .unwrap()
-                    .reserve_order(order);
-
-                if reserved {
-                    let order_id = Into::<Order>::into(order).id;
-                    self.order_map.insert(order_id, agent_id);
-                    self.book.add_order(order);
-                } else {
-                    rejected_orders.push(order);
-                }
-            });
-        });
-
-        std::mem::swap(&mut self.agents, &mut agents);
-
-        rejected_orders
     }
 
     fn fulfill_transaction(&mut self, trns: &Transaction) {

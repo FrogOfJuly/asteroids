@@ -1,4 +1,4 @@
-use crate::ob::amount::Amount;
+use crate::amount::Amount;
 
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
 pub enum OrderSide {

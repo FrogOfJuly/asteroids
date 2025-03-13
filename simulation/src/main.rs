@@ -1,12 +1,12 @@
 #![feature(trait_alias)]
 
+use std::cell::RefCell;
+
 use agents::{BuyAgent, SellAgent};
 use market::{
-    mkt::{
-        agent::Agent as GeneralAgent,
-        market::{Market, MarketInfo},
-    },
-    ob::amount::Amount,
+    agent::Agent as GenericAgent,
+    amount::Amount,
+    market::{History, Market, MarketInfo},
 };
 
 enum CommodityType {
@@ -14,7 +14,7 @@ enum CommodityType {
 }
 
 trait Agent =
-    GeneralAgent<CommodityType = CommodityType, MarketInfoType = MarketInfo<CommodityType>>;
+    GenericAgent<CommodityType = CommodityType, MarketInfoType = MarketInfo<CommodityType>>;
 
 fn main() {
     let mut market = Market::new(MarketInfo {
@@ -38,34 +38,44 @@ fn main() {
         _ph: Default::default(),
     });
 
-    let ids = [buy_agent, sell_agent].map(|agent| market.register_with_default_acc(agent));
+    let agents = [buy_agent, sell_agent]
+        .map(|agent| (market.register_with_default_acc(), RefCell::new(agent)));
 
-    market.accounts.get_mut(&ids[0]).unwrap().money += Amount { as_int: 30 };
-    market.accounts.get_mut(&ids[1]).unwrap().commodity += 20;
+    market.accounts.get_mut(&agents[0].0).unwrap().money += Amount { as_int: 30 };
+    market.accounts.get_mut(&agents[1].0).unwrap().commodity += 20;
 
-    for _ in 1..10 {
+    let mut history = History::default();
 
-        let bidder_money = market.accounts.get(&ids[0]).unwrap().money.as_int;
-        let asker_comm = market.accounts.get(&ids[1]).unwrap().commodity;
+    for step in 1..=10 {
+        let bidder_money = market.accounts.get(&agents[0].0).unwrap().money.as_int;
+        let asker_comm = market.accounts.get(&agents[1].0).unwrap().commodity;
+
+        println!("history: {}", history);
+        println!("-------");
+
+        let rejected_orders = market.agents_submit_orders(agents.as_slice(), &history);
+        let transactions = market.process_submitted_orders(history.market_price());
+        let unfulfilled_orders = market.all_orders();
+
+        history = History {
+            step,
+            transactions,
+            rejected_orders,
+            unfulfilled_orders,
+        };
 
         market.clear_orders();
-        market.step();
-        market.history.inc_step();
-
-        println!("-------");
 
         println!(
             "> buyer money: {bidder_money}->{:?}",
-            market.accounts.get(&ids[0]).unwrap().money.as_int
+            market.accounts.get(&agents[0].0).unwrap().money.as_int
         );
         println!(
             "> seller comm: {asker_comm}->{:?}",
-            market.accounts.get(&ids[1]).unwrap().commodity
+            market.accounts.get(&agents[1].0).unwrap().commodity
         );
 
-        println!("{}", market.history);
-
-        market.accounts.get_mut(&ids[0]).unwrap().money += Amount { as_int: 5 };
-        market.accounts.get_mut(&ids[1]).unwrap().commodity += 2;
+        market.accounts.get_mut(&agents[0].0).unwrap().money += Amount { as_int: 5 };
+        market.accounts.get_mut(&agents[1].0).unwrap().commodity += 2;
     }
 }

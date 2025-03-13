@@ -1,12 +1,25 @@
 #![feature(associated_type_defaults)]
+#![feature(inherent_associated_types)]
+#![feature(trait_alias)]
 
-pub mod mkt;
-pub mod ob;
+pub mod account;
+pub mod agent;
+pub mod amount;
+pub mod book;
+pub mod market;
+pub mod orders;
 
 #[cfg(test)]
 mod simulation_test {
-    use crate::mkt::{account::Account, agent::*, market::*};
-    use crate::ob::orders::flat::OrderData;
+    use std::cell::RefCell;
+
+    use crate::{
+        account::Account,
+        agent::{Agent, AgentId},
+        market::{History, Market, MarketInfo},
+        orders::flat::OrderData,
+    };
+
     enum CommodityType {
         Unit,
     }
@@ -55,14 +68,37 @@ mod simulation_test {
             name: "test".to_owned(),
             commodity: CommodityType::Unit,
         });
-        market.register_with_starting_acc(Box::new(ConsumerAgent {}));
-        market.register_with_starting_acc(Box::new(ProducerAgent {}));
+        let agents: Vec<_> = {
+            let mut agents: Vec<Market<CommodityType>::AgentRefType> = vec![];
 
-        while market.step() > 0 {
-            println!("{:?}", market.history);
-            market.history.inc_step();
+            agents.push(RefCell::new(Box::new(ConsumerAgent {})));
+            agents.push(RefCell::new(Box::new(ProducerAgent {})));
+
+            agents
+                .into_iter()
+                .map(|agent| (market.register_with_default_acc(), agent))
+                .collect()
+        };
+
+        let mut history = History::default();
+
+        for step in 1..=10 {
+            println!("history: {}", history);
+
+            let rejected_orders = market.agents_submit_orders(agents.as_slice(), &history);
+            let transactions = market.process_submitted_orders(history.market_price());
+            let unfulfilled_orders = market.all_orders();
+
+            history = History {
+                step,
+                transactions,
+                rejected_orders,
+                unfulfilled_orders,
+            };
+
+            market.clear_orders();
         }
 
-        println!("{}", market.history);
+        println!("history: {}", history);
     }
 }

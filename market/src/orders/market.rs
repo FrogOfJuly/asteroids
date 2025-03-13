@@ -1,4 +1,4 @@
-use crate::ob::orders::flat::OrderSide;
+use crate::orders::flat::OrderSide;
 
 use super::flat::{MarketOrderData, Order};
 

@@ -2,7 +2,7 @@ use super::{
     account::Account,
     market::{History, MarketInfo},
 };
-use crate::ob::orders::flat::OrderData;
+use crate::orders::flat::OrderData;
 
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct AgentId(u64);
