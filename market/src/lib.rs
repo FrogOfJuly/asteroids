@@ -1,3 +1,4 @@
+#![allow(incomplete_features)]
 #![feature(associated_type_defaults)]
 #![feature(inherent_associated_types)]
 #![feature(trait_alias)]
