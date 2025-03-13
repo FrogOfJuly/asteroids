@@ -15,6 +15,8 @@ eframe = { version = "0.30", default-features = false, features = [
     "wayland",       # To support Linux (and CI)
 ] }
 log = "0.4"
+market =  { path = "../market" }
+agents =  { path = "../agents" }
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
@@ -27,14 +29,6 @@ env_logger = "0.11"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4"
 web-sys = "0.3.70"           # to access the DOM (to hide the loading text)
-
-# [profile.release]
-# opt-level = 2 # fast and small wasm
-
-# # Optimize all dependencies even in debug builds:
-# [profile.dev.package."*"]
-# opt-level = 2
-
 
 # [patch.crates-io]
 
