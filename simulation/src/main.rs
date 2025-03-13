@@ -45,6 +45,7 @@ fn main() {
     market.accounts.get_mut(&agents[1].0).unwrap().commodity += 20;
 
     let mut history = History::default();
+    let mut market_price = None;
 
     for step in 1..=10 {
         let bidder_money = market.accounts.get(&agents[0].0).unwrap().money.as_int;
@@ -54,7 +55,7 @@ fn main() {
         println!("-------");
 
         let rejected_orders = market.agents_submit_orders(agents.as_slice(), &history);
-        let transactions = market.process_submitted_orders(history.market_price());
+        let transactions = market.process_submitted_orders(market_price);
         let unfulfilled_orders = market.all_orders();
 
         history = History {
@@ -64,7 +65,16 @@ fn main() {
             unfulfilled_orders,
         };
 
-        market.clear_orders();
+        if !history.no_transactions() {
+            market_price = history.market_price()
+        }
+
+        println!(
+            "market price: {}",
+            market_price.map_or("?".to_owned(), |x| x.as_int.to_string())
+        );
+
+        market.clear_reserves_and_orders();
 
         println!(
             "> buyer money: {bidder_money}->{:?}",

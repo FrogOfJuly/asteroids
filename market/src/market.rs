@@ -1,8 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Display, iter::repeat};
+use std::{cell::RefCell, collections::HashMap, fmt::Display};
 
 use crate::{
     amount::Amount,
-    book::{OrderBook, Transaction},
+    order_book::{OrderBook, Transaction},
     orders::{
         flat::{Order, OrderData},
         limit::LimitOrder,
@@ -37,6 +37,10 @@ impl History {
                 as_int: sum / (self.transactions.len() as i64),
             })
         }
+    }
+
+    pub fn no_transactions(&self) -> bool {
+        self.transactions.is_empty()
     }
 
     pub fn clear(&mut self) {
@@ -152,7 +156,7 @@ impl<CommodityType> Market<CommodityType> {
         self.accounts.get(&agent_id).cloned()
     }
 
-    pub fn clear_orders(&mut self) {
+    pub fn clear_reserves_and_orders(&mut self) {
         self.order_map.clear();
         self.clear_reservations();
         self.book.clear_orders();
@@ -171,7 +175,7 @@ impl<CommodityType> Market<CommodityType> {
 
                 self.create_orders(id, data.as_slice())
                     .into_iter()
-                    .zip(repeat(*id))
+                    .zip(std::iter::repeat(*id))
             })
             .collect();
 

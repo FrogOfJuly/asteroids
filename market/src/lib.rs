@@ -5,8 +5,8 @@
 pub mod account;
 pub mod agent;
 pub mod amount;
-pub mod book;
 pub mod market;
+pub mod order_book;
 pub mod orders;
 
 #[cfg(test)]
@@ -69,12 +69,10 @@ mod simulation_test {
             commodity: CommodityType::Unit,
         });
         let agents: Vec<_> = {
-            let mut agents: Vec<Market<CommodityType>::AgentRefType> = vec![];
+            let a1: Market<CommodityType>::AgentRefType = RefCell::new(Box::new(ConsumerAgent {}));
+            let a2: Market<CommodityType>::AgentRefType = RefCell::new(Box::new(ProducerAgent {}));
 
-            agents.push(RefCell::new(Box::new(ConsumerAgent {})));
-            agents.push(RefCell::new(Box::new(ProducerAgent {})));
-
-            agents
+            [a1, a2]
                 .into_iter()
                 .map(|agent| (market.register_with_default_acc(), agent))
                 .collect()
@@ -96,7 +94,7 @@ mod simulation_test {
                 unfulfilled_orders,
             };
 
-            market.clear_orders();
+            market.clear_reserves_and_orders();
         }
 
         println!("history: {}", history);
