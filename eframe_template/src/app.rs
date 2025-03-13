@@ -29,6 +29,7 @@ impl AsteroidApp {
         } else {
             Self {
                 dt: 0.1,
+                pause: false,
                 ..Default::default()
             }
         }
@@ -62,11 +63,23 @@ impl eframe::App for AsteroidApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
+            let max_y = self
+                .data
+                .iter()
+                .map(|x| x.as_int)
+                .reduce(i64::max)
+                .unwrap_or(0) as f32;
             ui.heading("Main panel");
             let plot = egui_plot::Plot::new("sin")
                 .legend(egui_plot::Legend::default())
+                .include_x(self.data.len() as f32)
+                .include_x(0)
+                .include_y(max_y)
+                .include_y(0)
                 .show_axes(true)
                 .show_grid(true);
+
+            println!("{}, {}, {}", self.pause, self.no_transactions, self.time);
 
             if !self.pause {
                 ui.ctx().request_repaint();
@@ -74,25 +87,29 @@ impl eframe::App for AsteroidApp {
                 self.time += dt;
             }
 
-            if self.market_configuration.history.no_transactions() {
-                self.no_transactions += 1;
-            }
+            // if self.no_transactions > 10 {
+            //     self.pause = true;
+            // }
 
-            if self.no_transactions > 10 {
-                self.pause = true;
-            }
-
-            if !self.pause{
-                println!("history: {:?}", self.market_configuration.history.transactions);
+            if !self.pause {
+                println!(
+                    "history: {:?}",
+                    self.market_configuration.history.transactions
+                );
             }
 
             if self.last_sim_step + self.dt < self.time {
+                println!("update");
                 let price = self
                     .market_configuration
                     .step()
                     .or(self.data.last().cloned());
                 self.data.push(price.unwrap_or_default());
                 self.last_sim_step = self.time;
+
+                if self.market_configuration.history.no_transactions() {
+                    self.no_transactions += 1;
+                }
             }
 
             plot.show(ui, |plot_ui| {
