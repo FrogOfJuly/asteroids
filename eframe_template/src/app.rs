@@ -1,20 +1,10 @@
-#[derive(serde::Deserialize, serde::Serialize)]
-#[serde(default)] 
+use egui::{NumExt as _, Vec2b};
+
+#[derive(serde::Deserialize, serde::Serialize, Default)]
+#[serde(default)]
 pub struct AsteroidApp {
-    label: String,
-
-    #[serde(skip)]
-    value: f32,
-}
-
-impl Default for AsteroidApp {
-    fn default() -> Self {
-        Self {
-            // Example stuff:
-            label: "Hello World!".to_owned(),
-            value: 2.7,
-        }
-    }
+    pause: bool,
+    time: f64,
 }
 
 impl AsteroidApp {
@@ -36,8 +26,11 @@ impl eframe::App for AsteroidApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::top("Top panel").show(ctx, |ui| {
+        if ctx.input(|i| i.key_pressed(egui::Key::Space)) {
+            self.pause = !self.pause;
+        }
 
+        egui::TopBottomPanel::top("Top panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 let is_web = cfg!(target_arch = "wasm32");
                 if !is_web {
@@ -55,6 +48,31 @@ impl eframe::App for AsteroidApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Main panel");
+            let plot = egui_plot::Plot::new("sin")
+                .legend(egui_plot::Legend::default())
+                .show_axes(true)
+                .show_grid(true)
+                .auto_bounds(Vec2b::new(false, false));
+
+            let time = self.time;
+
+            if !self.pause {
+                ui.ctx().request_repaint();
+                self.time += ui.input(|i| i.unstable_dt).at_most(1.0 / 30.0) as f64;
+            }
+
+            plot.show(ui, |plot_ui| {
+                plot_ui.line(
+                    egui_plot::Line::new(egui_plot::PlotPoints::from_explicit_callback(
+                        move |x| (2.0 * x + time).sin(),
+                        -2.0..2.0,
+                        512,
+                    ))
+                    .color(egui::Color32::from_rgb(200, 100, 100))
+                    .style(egui_plot::LineStyle::dotted_dense()),
+                );
+            })
+            .response
         });
     }
 }
