@@ -1,5 +1,3 @@
-#![feature(trait_alias)]
-
 use std::cell::RefCell;
 
 use agents::{BuyAgent, SellAgent};
@@ -16,15 +14,16 @@ enum CommodityType {
 trait Agent =
     GenericAgent<CommodityType = CommodityType, MarketInfoType = MarketInfo<CommodityType>>;
 
-fn main() {
+#[test]
+fn run() {
     let mut market = Market::new(MarketInfo {
         name: "test".to_owned(),
         commodity: CommodityType::Unit,
     });
 
     let buy_agent: Box<dyn Agent> = Box::new(BuyAgent::<_> {
-        ask_size: 1,
-        ask_amount: 2,
+        bid_size: 1,
+        bid_amount: 2,
         period: 2,
         innate_price: Some(Amount { as_int: 10 }),
         _ph: Default::default(),
@@ -38,8 +37,11 @@ fn main() {
         _ph: Default::default(),
     });
 
-    let agents = [buy_agent, sell_agent]
-        .map(|agent| (market.register_with_default_acc(), RefCell::new(agent)));
+    let agents = [buy_agent, sell_agent].map(|mut agent| {
+        let id = market.register_with_default_acc();
+        agent.setup(id, &market.info);
+        (id, RefCell::new(agent))
+    });
 
     market.accounts.get_mut(&agents[0].0).unwrap().money += Amount { as_int: 30 };
     market.accounts.get_mut(&agents[1].0).unwrap().commodity += 20;

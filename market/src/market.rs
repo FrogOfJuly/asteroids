@@ -124,7 +124,9 @@ impl<CommodityType> Market<CommodityType> {
                 agent_id.map(|&x| (x, order))
             })
             .flat_map(|x| {
-                println!("WARNING: there are orders without agents! {:?}", x);
+                if x.is_none() {
+                    println!("WARNING: there are orders without agents! {:?}", x);
+                }
                 x
             })
             .collect()
