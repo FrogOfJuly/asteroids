@@ -27,7 +27,7 @@ pub struct SellAgent<T> {
     pub ask_size: i64,
     pub ask_amount: i64,
     pub period: u64,
-    pub eigen_price: Option<Amount>,
+    pub innate_price: Option<Amount>,
     pub _ph: std::marker::PhantomData<T>,
 }
 
@@ -49,7 +49,7 @@ impl<T> Agent for SellAgent<T> {
         vec![
             OrderData {
                 side: OrderSide::Ask,
-                price: history.market_price().or(self.eigen_price),
+                price: history.market_price().or(self.innate_price),
                 size: account.commodity.min(self.ask_size),
             };
             self.ask_amount as usize
@@ -61,7 +61,7 @@ pub struct BuyAgent<T> {
     pub ask_size: i64,
     pub ask_amount: i64,
     pub period: u64,
-    pub eigen_price: Option<Amount>,
+    pub innate_price: Option<Amount>,
     pub _ph: std::marker::PhantomData<T>,
 }
 
@@ -83,7 +83,7 @@ impl<T> Agent for BuyAgent<T> {
         vec![
             OrderData {
                 side: OrderSide::Bid,
-                price: history.market_price().or(self.eigen_price),
+                price: history.market_price().or(self.innate_price),
                 size: self.ask_size,
             };
             self.ask_amount as usize

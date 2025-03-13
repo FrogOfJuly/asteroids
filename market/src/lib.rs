@@ -5,8 +5,8 @@
 pub mod account;
 pub mod agent;
 pub mod amount;
-pub mod market;
 pub mod order_book;
+pub mod market;
 pub mod orders;
 
 #[cfg(test)]

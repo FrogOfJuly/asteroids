@@ -26,7 +26,7 @@ fn main() {
         ask_size: 1,
         ask_amount: 2,
         period: 2,
-        eigen_price: Some(Amount { as_int: 10 }),
+        innate_price: Some(Amount { as_int: 10 }),
         _ph: Default::default(),
     });
 
@@ -34,7 +34,7 @@ fn main() {
         ask_size: 1,
         ask_amount: 2,
         period: 2,
-        eigen_price: Some(Amount { as_int: 8 }),
+        innate_price: Some(Amount { as_int: 8 }),
         _ph: Default::default(),
     });
 

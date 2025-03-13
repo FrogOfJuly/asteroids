@@ -18,8 +18,8 @@ use super::{
 pub struct History {
     pub step: u64,
     pub transactions: Vec<Transaction>,
-    pub rejected_orders: Vec<Order>,
-    pub unfulfilled_orders: Vec<Order>,
+    pub rejected_orders: Vec<(AgentId, Order)>,
+    pub unfulfilled_orders: Vec<(AgentId, Order)>,
 }
 
 impl History {
@@ -43,10 +43,29 @@ impl History {
         self.transactions.is_empty()
     }
 
+    pub fn filter_by_agent_id(&self, agent_id: &AgentId) -> History {
+        History {
+            step: self.step,
+            transactions: self.transactions.clone(),
+            rejected_orders: self
+                .rejected_orders
+                .iter()
+                .cloned()
+                .filter(|(id, _)| agent_id == id)
+                .collect(),
+            unfulfilled_orders: self
+                .unfulfilled_orders
+                .iter()
+                .cloned()
+                .filter(|(id, _)| agent_id == id)
+                .collect(),
+        }
+    }
+
     pub fn clear(&mut self) {
-        self.transactions = Default::default();
-        self.rejected_orders = Default::default();
-        self.unfulfilled_orders = Default::default();
+        self.transactions.clear();
+        self.rejected_orders.clear();
+        self.unfulfilled_orders.clear();
     }
 }
 
@@ -96,8 +115,19 @@ impl<CommodityType> Market<CommodityType> {
         }
     }
 
-    pub fn all_orders(&self) -> Vec<Order> {
-        self.book.all_orders()
+    pub fn all_orders(&self) -> Vec<(AgentId, Order)> {
+        self.book
+            .all_orders()
+            .into_iter()
+            .map(|order| {
+                let agent_id = self.order_map.get(&order.id);
+                agent_id.map(|&x| (x, order))
+            })
+            .flat_map(|x| {
+                println!("WARNING: there are orders without agents! {:?}", x);
+                x
+            })
+            .collect()
     }
 
     pub fn create_orders(
@@ -166,7 +196,7 @@ impl<CommodityType> Market<CommodityType> {
         &mut self,
         agents: &[(AgentId, Self::AgentRefType)],
         history: &History,
-    ) -> Vec<Order> {
+    ) -> Vec<(AgentId, Order)> {
         let orders: Vec<(Option<Order>, AgentId)> = agents
             .iter()
             .filter_map(|(id, agent)| self.account(*id).map(|account| (id, agent, account)))
@@ -181,7 +211,9 @@ impl<CommodityType> Market<CommodityType> {
 
         orders
             .into_iter()
-            .flat_map(|(order, id)| order.map(|order| self.submit_order(&id, order)))
+            .flat_map(|(order, id)| {
+                order.map(|order| self.submit_order(&id, order).map(|x| (id, x)))
+            })
             .flatten()
             .collect()
     }
