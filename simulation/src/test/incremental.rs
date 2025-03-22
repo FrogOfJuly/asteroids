@@ -1,4 +1,4 @@
-use crate::configurations::MarketConfiguration;
+use crate::configurations::example1::MarketConfiguration;
 
 #[test]
 fn run() {

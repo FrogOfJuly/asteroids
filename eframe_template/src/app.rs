@@ -1,6 +1,6 @@
 use egui::NumExt as _;
 use market::amount::Amount;
-use simulation::configurations::MarketConfiguration;
+use simulation::configurations::example1::MarketConfiguration;
 
 #[derive(serde::Deserialize, serde::Serialize, Default)]
 #[serde(default)]
@@ -10,6 +10,7 @@ pub struct AsteroidApp {
     #[serde(skip)]
     time: f64,
 
+    #[serde(skip)]
     last_sim_step: f64,
     dt: f64,
 
